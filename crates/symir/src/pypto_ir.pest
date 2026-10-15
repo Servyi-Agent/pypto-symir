@@ -1,0 +1,210 @@
+// Grammar for the printed PyPTO IR (the `.as_python()` / passes_dump form).
+//
+// Line-oriented: each content line carries an optional INDENT token whose
+// width the caller compares (plain arithmetic) to recover block structure.
+// There is NO implicit WHITESPACE rule — it would eat a line's leading
+// indent before INDENT? could capture it — so inter-token spacing is
+// explicit through `ows` (optional whitespace). Dotted names and call/
+// subscript trailers stay dense (`pl.range(4)`), matching the printer.
+//
+// Input is LF-only. Keywords are matched by atomic KW_ rules that keep the
+// `!ident_continue` guard glued to the literal.
+
+// Atomic keyword tokens (literal + word boundary).
+KW_IMPORT = @{ "import" ~ !ident_continue }
+KW_AS     = @{ "as" ~ !ident_continue }
+KW_CLASS  = @{ "class" ~ !ident_continue }
+KW_DEF    = @{ "def" ~ !ident_continue }
+KW_FOR    = @{ "for" ~ !ident_continue }
+KW_IN     = @{ "in" ~ !ident_continue }
+KW_IF     = @{ "if" ~ !ident_continue }
+KW_ELIF   = @{ "elif" ~ !ident_continue }
+KW_ELSE   = @{ "else" ~ !ident_continue }
+KW_WITH   = @{ "with" ~ !ident_continue }
+KW_RETURN = @{ "return" ~ !ident_continue }
+KW_PASS   = @{ "pass" ~ !ident_continue }
+KW_OR     = @{ "or" ~ !ident_continue }
+KW_AND    = @{ "and" ~ !ident_continue }
+KW_NOT    = @{ "not" ~ !ident_continue }
+KW_TRUE   = @{ "True" ~ !ident_continue }
+KW_FALSE  = @{ "False" ~ !ident_continue }
+KW_SELF   = @{ "self" ~ !ident_continue }
+
+// ---------------------------------------------------------------------------
+// File shape
+// ---------------------------------------------------------------------------
+
+source_file = { SOI ~ file_line* ~ EOI }
+
+file_line = _{
+    content_line ~ NEWLINE
+  | NEWLINE
+  | blank_line ~ NEWLINE
+  | content_line
+  | blank_line
+}
+
+blank_line = ${ WS_ONLY+ }
+
+content_line = { INDENT? ~ line_content ~ ows ~ line_end }
+
+line_end = _{ &NEWLINE | !ANY }
+
+line_content = _{
+    comment_line
+  | import_line
+  | decorator_line
+  | class_header
+  | def_header
+  | for_header
+  | if_header
+  | elif_header
+  | else_header
+  | with_header
+  | return_stmt
+  | pass_stmt
+  | statement
+}
+
+comment_line = ${ COMMENT }
+import_line = { KW_IMPORT ~ ows ~ (dotted_name | ident) ~ (ows ~ KW_AS ~ ows ~ ident)? }
+
+// ---------------------------------------------------------------------------
+// Headers (a block always follows; the body is assembled by the caller from
+// INDENT widths)
+// ---------------------------------------------------------------------------
+
+decorator_line = { "@" ~ ows ~ dotted_name ~ (ows ~ call_args)? }
+
+class_header = { KW_CLASS ~ ows ~ ident ~ ows ~ ":" }
+
+def_header = {
+    KW_DEF ~ ows ~ ident ~ ows ~ "(" ~ ows ~ param_list? ~ ows ~ ")"
+    ~ (ows ~ "->" ~ ows ~ expr)?
+    ~ ows ~ ":"
+}
+
+param_list = { param ~ (ows ~ "," ~ ows ~ param)* ~ ows ~ ","? }
+param = { KW_SELF | annotated_param }
+annotated_param = { ident ~ ows ~ ":" ~ ows ~ expr }
+
+for_header = { KW_FOR ~ ows ~ for_targets ~ ows ~ KW_IN ~ ows ~ expr ~ ows ~ ":" }
+for_targets = { for_target ~ (ows ~ "," ~ ows ~ for_target)* }
+for_target = _{ bare_target | target_group }
+bare_target = ${ ident }
+target_group = { "(" ~ ows ~ ident ~ (ows ~ "," ~ ows ~ ident)* ~ ows ~ ","? ~ ows ~ ")" }
+
+if_header = { KW_IF ~ ows ~ expr ~ ows ~ ":" }
+elif_header = { KW_ELIF ~ ows ~ expr ~ ows ~ ":" }
+else_header = ${ KW_ELSE ~ ows ~ ":" }
+
+with_header = { KW_WITH ~ ows ~ expr ~ (ows ~ KW_AS ~ ows ~ ident)? ~ ows ~ ":" }
+
+return_stmt = { KW_RETURN ~ (ows ~ expr)? }
+pass_stmt = ${ KW_PASS }
+
+// ---------------------------------------------------------------------------
+// Simple statements
+// ---------------------------------------------------------------------------
+
+statement = { assign_stmt | expr_stmt }
+
+assign_stmt = {
+    assign_targets ~ ows ~ ":" ~ ows ~ expr ~ ows ~ "=" ~ ows ~ expr
+  | assign_targets ~ ows ~ "=" ~ ows ~ expr
+}
+assign_targets = _{ assign_target ~ (ows ~ "," ~ ows ~ assign_target)* }
+assign_target = _{ bare_target | target_group }
+
+expr_stmt = { expr }
+
+// ---------------------------------------------------------------------------
+// Expressions (precedence climbing)
+// ---------------------------------------------------------------------------
+
+expr = { or_expr }
+
+or_expr = { and_expr ~ (ows ~ KW_OR ~ ows ~ and_expr)* }
+
+and_expr = { not_expr ~ (ows ~ KW_AND ~ ows ~ not_expr)* }
+
+not_expr = { KW_NOT ~ ows ~ not_expr | comparison }
+
+// The DSL allows exactly one comparison per node (chained comparisons are a
+// parse error in PyPTO), so one optional operator here mirrors the language.
+comparison = { additive ~ (ows ~ comp_op ~ ows ~ additive)? }
+comp_op = { "==" | "!=" | "<=" | ">=" | "<" | ">" }
+
+additive = { multiplicative ~ (ows ~ add_op ~ ows ~ multiplicative)* }
+add_op = { "+" | "-" }
+
+multiplicative = { unary ~ (ows ~ mul_op ~ ows ~ unary)* }
+mul_op = { "*" | "//" | "/" | "%" }
+
+unary = { (unary_op ~ ows ~ unary) | postfix }
+unary_op = { "+" | "-" }
+
+postfix = { primary ~ trailer* }
+
+trailer = _{
+    call_args
+  | subscript
+  | ("." ~ ident)
+}
+
+primary = _{
+    float_lit
+  | int_lit
+  | string_lit
+  | bool_lit
+  | dict_lit
+  | list_lit
+  | tuple_lit
+  | group_lit
+  | unit_lit
+  | name
+}
+
+name = ${ dotted_name | ident }
+dotted_name = ${ ident ~ ("." ~ ident)+ }
+
+ident = @{ ident_start ~ ident_continue* }
+ident_start = @{ ASCII_ALPHA | "_" }
+ident_continue = @{ ASCII_ALPHANUMERIC | "_" }
+
+int_lit = @{ "-"? ~ ASCII_DIGIT+ }
+float_lit = @{ "-"? ~ ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT+ }
+string_lit = ${ dq_string | sq_string }
+dq_string = { "\"" ~ dq_inner ~ "\"" }
+dq_inner = @{ (!("\"" | NEWLINE) ~ ANY)* }
+sq_string = { "'" ~ sq_inner ~ "'" }
+sq_inner = @{ (!("'" | NEWLINE) ~ ANY)* }
+bool_lit = { KW_TRUE | KW_FALSE }
+
+group_lit = { "(" ~ ows ~ expr ~ ows ~ ")" }
+unit_lit = ${ "(" ~ ows ~ ")" }
+list_lit = { "[" ~ ows ~ (expr ~ (ows ~ "," ~ ows ~ expr)* ~ ows ~ ","?)? ~ ows ~ "]" }
+tuple_lit = { "(" ~ ows ~ expr ~ ows ~ "," ~ ows ~ (expr ~ (ows ~ "," ~ ows ~ expr)*)? ~ ows ~ ","? ~ ows ~ ")" }
+dict_lit = { "{" ~ ows ~ (dict_entry ~ (ows ~ "," ~ ows ~ dict_entry)* ~ ows ~ ","?)? ~ ows ~ "}" }
+dict_entry = { dict_key ~ ows ~ ":" ~ ows ~ expr }
+dict_key = { string_lit | int_lit | bool_lit }
+
+call_args = { "(" ~ ows ~ call_args_inner ~ ows ~ ")" }
+call_args_inner = { (call_arg ~ (ows ~ "," ~ ows ~ call_arg)* ~ ows ~ ","?)? }
+call_arg = _{ kwarg | expr }
+kwarg = { ident ~ ows ~ "=" ~ ows ~ expr }
+
+subscript = { "[" ~ ows ~ (index_item ~ (ows ~ "," ~ ows ~ index_item)* ~ ows ~ ","?)? ~ ows ~ "]" }
+index_item = _{ slice_all | index_expr }
+slice_all = ${ ":" }
+index_expr = { expr }
+
+// ---------------------------------------------------------------------------
+// Tokens
+// ---------------------------------------------------------------------------
+
+ows = _{ WS_ONLY* }
+INDENT = ${ " "+ }
+WS_ONLY = _{ " " | "\t" }
+COMMENT = ${ "#" ~ (!NEWLINE ~ ANY)* }
+NEWLINE = { "\n" }

@@ -1,0 +1,18 @@
+[workspace]
+resolver = "2"
+members = ["crates/symir"]
+
+# NOTE: deliberately no [workspace.lints] table and no per-crate [lints]
+# tables — the Servyi lint policy is the explicit flag list the CI runs
+# (servyi/lints lint-policy action). A manifest table would be a second
+# place to configure lints that silently drifts from it
+# (servyi/lints `workspace_lints_table`).
+
+[workspace.package]
+edition = "2021"
+version = "0.1.0"
+license = "MIT OR Apache-2.0"
+rust-version = "1.85"
+
+[profile.release]
+lto = "thin"

@@ -1,0 +1,27 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+          components: rustfmt
+      - run: cargo fmt --check
+      - run: cargo test --workspace --all-targets
+      - run: cargo test --doc
+
+  lint-policy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # The shared Servyi lint policy: clippy under the explicit flag list,
+      # the unsafe_scope driver, and rustdoc link checks.
+      - uses: servyi/lints/.github/actions/lint-policy@main
