@@ -1,0 +1,6 @@
+digraph {
+    0 [ label = "host:\lR:[] W:[]" ]
+    1 [ label = "k1\lR:[x] W:[m1]" ]
+    2 [ label = "k2\lR:[m1] W:[m2]" ]
+    1 -> 2 [ label = "raw [m1]" ]
+}

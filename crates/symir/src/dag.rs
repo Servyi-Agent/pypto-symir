@@ -37,6 +37,18 @@ pub struct TaskDag {
     pub regions: Vec<String>,
 }
 
+/// Dependency-tracking mode a task was launched under.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ScopeMode {
+    /// Outside any explicit tracking scope (compiler-owned auto placement).
+    Unscoped,
+    /// Auto tracking on (OverlapMap inference will order overlaps).
+    Auto,
+    /// Manual scope: inference skipped; only declared `deps=` order.
+    Manual,
+}
+
 /// What a node represents.
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
@@ -81,6 +93,8 @@ pub struct DagNode {
     pub guards: Vec<String>,
     /// Source line of the defining statement.
     pub line: usize,
+    /// Dependency-tracking mode at launch.
+    pub scope_mode: ScopeMode,
 }
 
 /// A reference to a loop's uninterpreted iteration variable.

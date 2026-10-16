@@ -29,7 +29,8 @@ use std::collections::HashMap;
 use crate::ast::{BinOp, Expr, Function, IndexItem, Program, Stmt, UnaryOp};
 use crate::consts;
 use crate::dag::{
-    Constraint, DagEdge, DagNode, EdgeKind, IterRef, NodeKind, ParRole, RegionId, TaskDag, Warning,
+    Constraint, DagEdge, DagNode, EdgeKind, IterRef, NodeKind, ParRole, RegionId, ScopeMode,
+    TaskDag, Warning,
 };
 use crate::error::SymirError;
 use crate::sym::{SymVal, ITER_VAR_PREFIX};
@@ -79,6 +80,8 @@ pub struct Interp<'a> {
     region_counter: usize,
     loop_counter: usize,
     inline_depth: usize,
+    /// Innermost tracking-scope mode stack (`pl.scope` / `pl.manual_scope`).
+    scope_modes: Vec<ScopeMode>,
 }
 
 /// Extracts the DAG from `prog`, interpreting `entry` (or the detected
@@ -98,8 +101,10 @@ pub fn interpret(prog: &Program, entry: Option<&str>) -> Result<TaskDag, SymirEr
         region_counter: 0,
         loop_counter: 0,
         inline_depth: 0,
+        scope_modes: Vec::new(),
     };
     interp.run(&chosen)?;
+    interp.flag_manual_unordered();
     Ok(interp.dag)
 }
 
@@ -303,6 +308,7 @@ impl<'a> Interp<'a> {
             iter_ctx,
             guards,
             line: 0,
+            scope_mode: self.current_scope_mode(),
         });
         id
     }
@@ -715,6 +721,34 @@ impl<'a> Interp<'a> {
         Ok(())
     }
 
+    /// The effective tracking mode: the innermost tracking scope, or Auto
+    /// outside one (the compiler owns AUTO placement by default).
+    fn current_scope_mode(&self) -> ScopeMode {
+        self.scope_modes.last().copied().unwrap_or(ScopeMode::Auto)
+    }
+
+    /// Whether a `with` scope is a tracking scope, and in which mode.
+    fn tracking_mode(scope: &Expr) -> Option<ScopeMode> {
+        let leaf = leaf_name(scope);
+        if leaf == consts::SCOPE_MANUAL {
+            return Some(ScopeMode::Manual);
+        }
+        if leaf == consts::SCOPE_GENERIC {
+            let manual = match scope {
+                Expr::Call { kwargs, .. } => kwargs.iter().any(|(k, v)| {
+                    k == consts::KWARG_MODE && contains_attr_leaf(v, consts::MODE_MANUAL)
+                }),
+                _ => false,
+            };
+            return Some(if manual {
+                ScopeMode::Manual
+            } else {
+                ScopeMode::Auto
+            });
+        }
+        None
+    }
+
     fn exec_with(
         &mut self,
         scope: &Expr,
@@ -726,9 +760,28 @@ impl<'a> Interp<'a> {
             _ => (Vec::new(), Vec::new()),
         };
         let leaf = leaf_name(scope);
+        let tracking = Self::tracking_mode(scope);
+        if let Some(mode) = tracking {
+            self.scope_modes.push(mode);
+        }
+        let result = self.exec_with_inner(binder, body, &args, &kwargs, &leaf);
+        if tracking.is_some() {
+            let _ = self.scope_modes.pop();
+        }
+        result
+    }
+
+    fn exec_with_inner(
+        &mut self,
+        binder: Option<&str>,
+        body: &[Stmt],
+        args: &[Expr],
+        kwargs: &[(String, Expr)],
+        leaf: &str,
+    ) -> Result<(), SymirError> {
         if leaf == consts::SCOPE_SPMD {
             let _ = args;
-            let hint = self.scope_hint(&kwargs);
+            let hint = self.scope_hint(kwargs);
             let iter_ctx = self.iter_stack.clone();
             let guards = self.guard_stack.clone();
             let spmd = consts::SCOPE_SPMD;
@@ -741,7 +794,7 @@ impl<'a> Interp<'a> {
                 iter_ctx,
                 guards,
             );
-            self.apply_explicit_deps(&kwargs, node)?;
+            self.apply_explicit_deps(kwargs, node)?;
             self.run_scope_body(node, body)?;
             if let Some(binder) = binder {
                 let _ = self.env.insert(binder.to_owned(), SymVal::Task { node });
@@ -1260,6 +1313,46 @@ impl<'a> Interp<'a> {
         Ok(())
     }
 
+    /// Flags derived edges that nothing will order: no `dep` edge covers
+    /// the pair, and at least one endpoint was launched under manual
+    /// tracking (so the runtime's OverlapMap inference skipped it).
+    fn flag_manual_unordered(&mut self) {
+        let dep_pairs: Vec<(usize, usize)> = self
+            .dag
+            .edges
+            .iter()
+            .filter(|e| e.kind == EdgeKind::Dep)
+            .flat_map(|e| [(e.from, e.to), (e.to, e.from)])
+            .collect();
+        let mut findings: Vec<(usize, String)> = Vec::new();
+        for edge in &self.dag.edges {
+            if edge.kind == EdgeKind::Dep {
+                continue;
+            }
+            if dep_pairs.contains(&(edge.from, edge.to)) {
+                continue;
+            }
+            let manual = [edge.from, edge.to].iter().any(|id| {
+                self.dag
+                    .nodes
+                    .get(*id)
+                    .is_some_and(|n| n.scope_mode == ScopeMode::Manual)
+            });
+            if !manual {
+                continue;
+            }
+            let region = edge
+                .regions
+                .first()
+                .and_then(|r| self.dag.regions.get(*r).cloned())
+                .unwrap_or_default();
+            findings.push((edge.to, manual_unordered_message(&region)));
+        }
+        for (node, message) in findings {
+            self.dag.warnings.push(Warning { node, message });
+        }
+    }
+
     fn frame(&mut self) -> &mut Frame {
         self.frames
             .last_mut()
@@ -1295,6 +1388,13 @@ impl<'a> Interp<'a> {
             .expect("frame stack is never empty — run() pushes one")
             .readers
     }
+}
+
+/// Warning text for an unordered manual-scope access (kept literal-free).
+fn manual_unordered_message(region: &str) -> String {
+    format!(
+        "manual-scope unordered access on region {region}: the dataflow edge is derived but nothing establishes it (no deps= edge, and manual mode skips inference for at least one endpoint)"
+    )
 }
 
 fn internal_frame() -> SymirError {

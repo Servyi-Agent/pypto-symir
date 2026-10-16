@@ -64,6 +64,12 @@ pub const SKIP_CALLEE: usize = 1;
 // --- scope heads (`with ...`) ------------------------------------------------
 
 pub const SCOPE_GENERIC: &str = "scope";
+/// The manual-tracking opt-out scope.
+pub const SCOPE_MANUAL: &str = "manual_scope";
+/// The mode kwarg of `pl.scope(...)`.
+pub const KWARG_MODE: &str = "mode";
+/// The MANUAL enum leaf of `pl.ScopeMode`.
+pub const MODE_MANUAL: &str = "MANUAL";
 pub const SCOPE_AT: &str = "at";
 pub const SCOPE_SPMD: &str = "spmd";
 pub const SCOPE_CLUSTER: &str = "cluster";

@@ -25,6 +25,8 @@ CLASSES = {
     "range_carry_post.py": "_jit_range_carry",
     "parallel_task_post.py": "_jit_parallel_task",
     "deepseek_indexer_pre.py": "_jit_entry",
+    "manual_in_auto.py": "Probe0",
+    "manual_via_inline.py": "Probe3",
 }
 
 failures = []
