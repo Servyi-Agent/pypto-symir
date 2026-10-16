@@ -44,12 +44,17 @@ pub fn build(dag: &TaskDag) -> TaskGraph {
             .map(|i| i.var.clone())
             .collect::<Vec<_>>()
             .join(consts::SEP_COMMA_SPACE);
-        let mut label = format!("{header}\\nR:[{reads}] W:[{writes}]");
+        // Real newline characters: graphviz renders them as line breaks
+        // in quoted labels, while the two-character escape sequence would
+        // survive petgraph's escaper as literal text (observed, red-tested
+        // in tests/graph.rs).
+        let nl = consts::LABEL_NEWLINE;
+        let mut label = format!("{header}{nl}R:[{reads}] W:[{writes}]");
         if !iters.is_empty() {
-            label = format!("{label}\\niter: {iters}");
+            label = format!("{label}{nl}iter: {iters}");
         }
         if !node.guards.is_empty() {
-            label = format!("{label}\\nwhen: {}", node.guards.join(consts::SEP_GUARD));
+            label = format!("{label}{nl}when: {}", node.guards.join(consts::SEP_GUARD));
         }
         indices.push(graph.add_node(label));
     }

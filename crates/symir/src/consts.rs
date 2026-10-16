@@ -177,6 +177,11 @@ pub const BOUND_STOP_INDEX: usize = 1;
 pub const DUMP_PAYLOAD_INDEX: usize = 1;
 /// Host-node header in graph labels.
 pub const GRAPH_KIND_HOST: &str = "host:";
+/// The two-character backslash-n sequence that must never appear in
+/// labels (petgraph escapes it into literal text).
+pub const BACKSLASH_N: &str = "\\n";
+/// A real newline inside graphviz labels.
+pub const LABEL_NEWLINE: &str = "\n";
 /// Guard separator in node labels.
 pub const SEP_GUARD: &str = " && ";
 /// Edge tags.

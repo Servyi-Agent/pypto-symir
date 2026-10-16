@@ -94,3 +94,36 @@ fn dot_output_is_petgraph_generated() {
     assert!(dot.contains("stage_a"), "node labels carried through");
     assert!(dot.contains("dep"), "edge labels carried through");
 }
+
+/// Observed 2026-10-16: node labels contained the two characters `\` + `n`
+/// instead of line breaks — petgraph's label escaper passes backslashes
+/// through as literal text, and the rendered SVGs printed "\n" verbatim.
+/// graphviz honors *raw* newline characters in quoted labels, so labels
+/// must contain real newlines, never the escape sequence.
+#[test]
+fn labels_carry_real_newlines_not_escape_sequences() {
+    let dag = extract(PARALLEL_CARRY, None).unwrap();
+    let dot = graph::build(&dag).to_dot(&dag.program);
+    assert!(
+        !dot.contains(consts_backslash_n()),
+        "DOT output still carries the literal two-character \\n sequence"
+    );
+    let node_label_count = dot
+        .split('\n')
+        .filter(|line| line.contains("R:[") && line.contains("W:["))
+        .count();
+    assert!(
+        node_count_with_effects(&dot) > 0,
+        "effect summaries present"
+    );
+}
+
+fn consts_backslash_n() -> &'static str {
+    // The literal two-character sequence, built without writing it inline
+    // (the servyi inline_literal policy).
+    symir::consts::BACKSLASH_N
+}
+
+fn node_count_with_effects(dot: &str) -> usize {
+    dot.split('\n').filter(|l| l.contains("R:[")).count()
+}
