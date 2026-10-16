@@ -36,8 +36,16 @@ establishes.
 cargo build --release
 ./target/release/symir kernel_dump.py --emit report   # constraints + warnings
 ./target/release/symir kernel_dump.py --emit dot -o dag.dot
+./target/release/symir kernel_dump.py --emit svg -o dag.svg   # needs graphviz
+./target/release/symir kernel_dump.py --emit png -o dag.png   # needs graphviz
 ./target/release/symir kernel_dump.py --emit json
 ```
+
+Drawing is fully library-driven: the DAG is built with
+[petgraph](https://crates.io/crates/petgraph) (which also powers the
+acyclicity assertion in `extract()`), `petgraph::dot::Dot` generates the
+layout description, and graphviz renders it. No hand-formatted graph
+text and no hand-drawn diagrams anywhere in the crate.
 
 Producing input from a PyPTO checkout:
 
@@ -86,6 +94,12 @@ dead arm shows as `when: ... && false`).
   inside the interpreted function yield concrete `Dep` edges.
 * Uninterpreted values flowing through SSA renames are terms, not regions;
   dependencies through pure value flow (no region write) are not edges.
+
+## Working rules
+
+See [AGENTS.md](AGENTS.md). The short version: every strange behavior
+gets a runtime assertion, a reproducing test demonstrated red against
+the pre-fix code, and then the fix that turns it green.
 
 ## Lint policy
 

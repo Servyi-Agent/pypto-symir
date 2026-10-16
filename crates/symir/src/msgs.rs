@@ -51,6 +51,7 @@ pub const MSG_CALL_ARGS_WITHOUT_PAYLOAD: &str = "call arguments without payload"
 pub const MSG_UNKNOWN_OPERATOR: &str = "unknown operator";
 
 // interpreter
+pub const MSG_NOT_A_DAG: &str = "the extracted graph contains a cycle";
 pub const MSG_NO_FUNCTIONS: &str = "the program has no functions";
 pub const MSG_INTERNAL_NO_FRAME: &str = "internal: no active frame";
 pub const MSG_INTERNAL_NODE_RANGE: &str = "internal: node index out of range";

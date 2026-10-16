@@ -22,6 +22,7 @@ pub mod consts;
 pub mod dag;
 pub mod emit;
 pub mod error;
+pub mod graph;
 pub mod interp;
 pub mod msgs;
 pub mod parse;
@@ -35,5 +36,12 @@ pub fn extract(src: &str, entry: Option<&str>) -> Result<TaskDag, SymirError> {
     let program = parse::parse_program(src)?;
     let dag = interp::interpret(&program, entry)?;
     dag.validate()?;
+    let task_graph = graph::build(&dag);
+    if !task_graph.is_acyclic() {
+        return Err(SymirError::Interp {
+            line: 0,
+            message: msgs::MSG_NOT_A_DAG.to_owned(),
+        });
+    }
     Ok(dag)
 }

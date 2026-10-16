@@ -1,5 +1,6 @@
 // Test expectations read better inline; the servyi `inline_literal` policy
 // sanctions silencing sites with an explicit allow.
+#![allow(unknown_lints)] // stable toolchain: the servyi lints exist only under the driver
 #![allow(inline_literal)]
 // Tests are the sanctioned exemption for panic/unwrap (servyi
 // `non_test_panic_allow`); this file is an integration-test crate.
@@ -169,7 +170,7 @@ fn while_loop_gets_symbolic_trip_count() {
 #[test]
 fn emit_dot_and_json_render() {
     let dag = extract(DEPS_TASKS, None).unwrap();
-    let dot = symir::emit::to_dot(&dag);
+    let dot = symir::graph::build(&dag).to_dot(&dag.program);
     assert!(dot.contains("digraph"));
     assert!(dot.contains("->"));
     let json = serde_json::to_string(&dag).unwrap();

@@ -1,5 +1,6 @@
 // Test expectations read better inline; the servyi `inline_literal` policy
 // sanctions silencing sites with an explicit allow.
+#![allow(unknown_lints)] // stable toolchain: the servyi lints exist only under the driver
 #![allow(inline_literal)]
 fn main() {
     let path = std::env::args().nth(1).unwrap_or_default();

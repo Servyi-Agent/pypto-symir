@@ -4,6 +4,7 @@
 //
 // The servyi `inline_literal` policy sanctions silencing sites with an
 // explicit allow; test expectations read better inline.
+#![allow(unknown_lints)] // stable toolchain: the servyi lints exist only under the driver
 #![allow(inline_literal)]
 // Tests are the sanctioned exemption for panic/unwrap (servyi
 // `non_test_panic_allow`); this file is an integration-test crate.
