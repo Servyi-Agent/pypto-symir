@@ -1,4 +1,7 @@
 digraph {
     0 [ label = "host:\lR:[x__ssa_v0, out__ssa_v0] W:[]" ]
-    1 [ label = "mu0: [0, 4)\lR:[x__ssa_v0] W:[]" ]
+    1 [ label = "mu0: [0, 4)\lR:[x__ssa_v0] W:[x__ssa_v0]" ]
+    2 [ label = "range_carry_incore_0\lR:[x__ssa_v0] W:[x__ssa_v0]\liter: mu0" ]
+    1 -> 2 [ label = "war [x__ssa_v0]" ]
+    1 -> 0 [ label = "raw [x__ssa_v0]" ]
 }

@@ -56,6 +56,9 @@ pub enum Stmt {
         iterator: Expr,
         body: Vec<Stmt>,
     },
+    /// Natural `while cond:` — parsed to `WhileStmt` without iter_args;
+    /// `ConvertToSSA` threads them on the compiler side.
+    While { cond: Expr, body: Vec<Stmt> },
     /// `with expr [as ident]:` — scopes (`pl.scope`, `pl.at`,
     /// `pl.spmd`, `pl.cluster`, ...).
     With {

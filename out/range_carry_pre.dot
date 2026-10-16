@@ -1,4 +1,5 @@
 digraph {
     0 [ label = "host:\lR:[x] W:[out]" ]
-    1 [ label = "mu0: [0, 4)\lR:[x] W:[]" ]
+    1 [ label = "mu0: [0, 4)\lR:[x] W:[x]" ]
+    1 -> 0 [ label = "raw [x]" ]
 }

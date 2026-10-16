@@ -2,6 +2,6 @@ digraph {
     0 [ label = "host:\lR:[] W:[]" ]
     1 [ label = "mu0a: [0, 4)\lR:[x__ssa_v0, out__ssa_v0] W:[out__ssa_v0]" ]
     2 [ label = "mu0b: [0, 4)\lR:[x__ssa_v0, out__ssa_v0] W:[out__ssa_v0]" ]
-    3 [ label = "loop_parallel_incore_0\lR:[x__ssa_v0] W:[out__ssa_v0]\liter: mu0" ]
+    3 [ label = "parallel_task_incore_0\lR:[x__ssa_v0] W:[out__ssa_v0]\liter: mu0" ]
     1 -> 2 [ label = "race [out__ssa_v0]" ]
 }

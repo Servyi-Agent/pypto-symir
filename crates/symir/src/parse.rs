@@ -50,6 +50,7 @@ enum LineKind {
     },
     If(Expr),
     Elif(Expr),
+    While(Expr),
     ElseHeader,
     With {
         scope: Expr,
@@ -154,6 +155,7 @@ fn classify(body: Pair<'_, Rule>, line_no: usize) -> Result<LineKind, SymirError
             })
         }
         Rule::if_header => Ok(LineKind::If(only_expr(body, line_no)?)),
+        Rule::while_header => Ok(LineKind::While(only_expr(body, line_no)?)),
         Rule::elif_header => Ok(LineKind::Elif(only_expr(body, line_no)?)),
         Rule::else_header => Ok(LineKind::ElseHeader),
         Rule::with_header => {
@@ -401,6 +403,12 @@ fn parse_block(lines: &[RawLine], pos: &mut usize, indent: usize) -> Result<Vec<
                     }
                 }
                 stmts.push(Stmt::If { arms });
+            }
+            LineKind::While(cond) => {
+                let header_pos = *pos;
+                let cond = cond.clone();
+                let body = block_after(lines, pos, header_pos, current.line)?;
+                stmts.push(Stmt::While { cond, body });
             }
             LineKind::Elif(_) | LineKind::ElseHeader => {
                 return Err(SymirError::Unsupported {
@@ -803,12 +811,18 @@ fn apply_trailer(base: Expr, trailer: Pair<'_, Rule>) -> Result<Expr, SymirError
         }
         Rule::subscript => {
             let mut indices = Vec::new();
-            // `index_item` is silent: its children attach directly.
+            // `index_item` is silent and wraps a non-silent `index_expr`,
+            // whose child is the `expr` — descend both levels.
             for child in trailer.into_inner() {
                 match child.as_rule() {
                     Rule::slice_all => indices.push(IndexItem::SliceAll),
-                    Rule::expr => {
-                        indices.push(IndexItem::Expr(Box::new(build_expr(child)?)));
+                    Rule::index_expr => {
+                        let Some(inner) = child.into_inner().next() else {
+                            return Err(SymirError::Parse(
+                                crate::msgs::MSG_EMPTY_EXPRESSION.to_owned(),
+                            ));
+                        };
+                        indices.push(IndexItem::Expr(Box::new(build_expr(inner)?)));
                     }
                     _ => {}
                 }

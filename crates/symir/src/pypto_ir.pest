@@ -18,6 +18,7 @@ KW_DEF    = @{ "def" ~ !ident_continue }
 KW_FOR    = @{ "for" ~ !ident_continue }
 KW_IN     = @{ "in" ~ !ident_continue }
 KW_IF     = @{ "if" ~ !ident_continue }
+KW_WHILE  = @{ "while" ~ !ident_continue }
 KW_ELIF   = @{ "elif" ~ !ident_continue }
 KW_ELSE   = @{ "else" ~ !ident_continue }
 KW_WITH   = @{ "with" ~ !ident_continue }
@@ -53,6 +54,7 @@ line_end = _{ &NEWLINE | !ANY }
 line_content = _{
     comment_line
   | import_line
+  | while_header
   | decorator_line
   | class_header
   | def_header
@@ -95,6 +97,7 @@ bare_target = ${ ident }
 target_group = { "(" ~ ows ~ ident ~ (ows ~ "," ~ ows ~ ident)* ~ ows ~ ","? ~ ows ~ ")" }
 
 if_header = { KW_IF ~ ows ~ expr ~ ows ~ ":" }
+while_header = { KW_WHILE ~ ows ~ expr ~ ows ~ ":" }
 elif_header = { KW_ELIF ~ ows ~ expr ~ ows ~ ":" }
 else_header = ${ KW_ELSE ~ ows ~ ":" }
 

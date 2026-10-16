@@ -349,6 +349,7 @@ impl<'a> Interp<'a> {
                 iterator,
                 body,
             } => self.exec_for(index_vars, iter_arg_vars, iterator, body),
+            Stmt::While { cond, body } => self.exec_while(cond, body),
             Stmt::With {
                 scope,
                 binder,
@@ -626,6 +627,92 @@ impl<'a> Interp<'a> {
             }
         }
         Ok(Vec::new())
+    }
+
+    /// Natural `while cond:` — one sequential loop node; the trip count is
+    /// uninterpreted (`trip_whileN`) and the condition is recorded as the
+    /// node's guard.
+    fn exec_while(&mut self, cond: &Expr, body: &[Stmt]) -> Result<(), SymirError> {
+        let loop_id = self.loop_counter;
+        self.loop_counter += 1;
+        let mu = format!("{ITER_VAR_PREFIX}{loop_id}");
+        let lo = consts::ZERO_TERM.to_owned();
+        let hi = format!("trip_while{loop_id}");
+        let guard = self.eval(cond)?.to_string();
+        let iter_ctx = self.iter_stack.clone();
+        let mut guards = self.guard_stack.clone();
+        guards.push(guard);
+        let node = self.push_node(
+            NodeKind::SeqLoop,
+            format!("{mu}: [{lo}, {hi})"),
+            iter_ctx.clone(),
+            guards,
+        );
+        self.dag.constraints.push(Constraint::Bounds {
+            loop_id,
+            var: mu.clone(),
+            lo,
+            hi,
+        });
+        let iter_val = SymVal::Iter {
+            loop_id,
+            var: mu.clone(),
+        };
+        let _ = iter_val;
+
+        let outer_writers = self.frame_writers();
+        let outer_readers = self.frame_readers();
+        self.frames.push(Frame {
+            nodes: vec![node],
+            writers: HashMap::new(),
+            readers: HashMap::new(),
+        });
+        self.iter_stack.push(crate::dag::IterRef {
+            loop_id,
+            var: mu.clone(),
+        });
+        self.exec_block(body)?;
+        let inner_writers = self.frame_writers();
+        let inner_readers = self.frame_readers();
+        let _ = self.iter_stack.pop();
+        let _ = self.frames.pop();
+
+        let dag_node = self.dag.nodes.get_mut(node).ok_or_else(internal_node)?;
+        for region in inner_writers.keys() {
+            let _ = dag_node.writes.insert(*region);
+        }
+        for region in inner_readers.keys() {
+            let _ = dag_node.reads.insert(*region);
+        }
+        for (region, writers) in &outer_writers {
+            if inner_readers.contains_key(region) {
+                for writer in writers {
+                    self.add_edge(*writer, node, EdgeKind::Raw, vec![*region]);
+                }
+            }
+            if inner_writers.contains_key(region) {
+                for writer in writers {
+                    self.add_edge(*writer, node, EdgeKind::Waw, vec![*region]);
+                }
+            }
+        }
+        for (region, readers) in &outer_readers {
+            if inner_writers.contains_key(region) {
+                for reader in readers {
+                    self.add_edge(*reader, node, EdgeKind::War, vec![*region]);
+                }
+            }
+        }
+        for region in inner_writers.keys() {
+            let _ = self.frame_writers_mut().insert(*region, vec![node]);
+        }
+        for region in inner_readers.keys() {
+            let entry = self.frame_readers_mut().entry(*region).or_default();
+            if !entry.contains(&node) {
+                entry.push(node);
+            }
+        }
+        Ok(())
     }
 
     fn exec_with(

@@ -41,7 +41,7 @@
 <g id="node4" class="node">
 <title>3</title>
 <ellipse fill="none" stroke="black" cx="757.03" cy="-142.22" rx="161.44" ry="37.45"/>
-<text text-anchor="start" x="651.03" y="-153.52" font-family="Times,serif" font-size="14.00">loop_parallel_incore_0</text>
+<text text-anchor="start" x="651.03" y="-153.52" font-family="Times,serif" font-size="14.00">parallel_task_incore_0</text>
 <text text-anchor="start" x="651.03" y="-138.52" font-family="Times,serif" font-size="14.00">R:[x__ssa_v0] W:[out__ssa_v0]</text>
 <text text-anchor="middle" x="757.03" y="-123.52" font-family="Times,serif" font-size="14.00">iter: mu0</text>
 </g>
