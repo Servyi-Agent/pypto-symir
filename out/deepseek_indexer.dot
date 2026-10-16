@@ -1,5 +1,5 @@
 digraph {
-    0 [ label = "host:entry\lR:[query, index_cache, index_cache_scale, output] W:[]" ]
+    0 [ label = "host:\lR:[query, index_cache, index_cache_scale, output] W:[]" ]
     1 [ label = "mu0: [0, param.num_tokens())\lR:[request_ids] W:[]\lwhen: t8=>=(t0=dim(R9, 1), 4096) && false" ]
     2 [ label = "spmd:c1a_index_score_paired_block_mxfp8_spmd\lR:[query, query_scale, weights, index_cache, index_cache_scale, block_table, request_ids, lengths, candidates, output] W:[output]\lwhen: false" ]
     3 [ label = "mu1: [t29=get_block_idx(), t28=*(t27=//(t26=cast(param.num_tokens(), pl.INDEX), 2), t25=//(t24=-(t23=+(t14=dim(R9, 1), 512), 1), 512)))\lR:[query, query_scale, weights, index_cache, index_cache_scale, block_table, request_ids, lengths, candidates, output] W:[output]\lwhen: false" ]

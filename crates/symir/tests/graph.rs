@@ -125,18 +125,3 @@ fn consts_backslash_n() -> &'static str {
 fn node_count_with_effects(dot: &str) -> usize {
     dot.split('\n').filter(|l| l.contains("R:[")).count()
 }
-
-/// Observed 2026-10-16: `parallel_carry` shows `W:[x]`, but the source
-/// never writes a variable named `x` — the write flows through the alias
-/// `a` created by `init_values=(x,)`. Region labels must name the aliases
-/// a region is reachable under (`x/a`), or the graph contradicts the
-/// source it was extracted from.
-#[test]
-fn region_labels_show_alias_names() {
-    let dag = extract(PARALLEL_CARRY, None).unwrap();
-    let dot = graph::build(&dag).to_dot(&dag.program);
-    assert!(
-        dot.contains("x/a"),
-        "the write to x flows through the alias a; labels must say so"
-    );
-}

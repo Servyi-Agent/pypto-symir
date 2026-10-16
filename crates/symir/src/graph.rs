@@ -32,7 +32,10 @@ pub fn build(dag: &TaskDag) -> TaskGraph {
     let mut graph = Graph::new();
     let mut indices = Vec::new();
     for node in &dag.nodes {
-        let header = node.label.clone();
+        let header = match node.kind {
+            crate::dag::NodeKind::Host => consts::GRAPH_KIND_HOST.to_owned(),
+            _ => node.label.clone(),
+        };
         let reads = region_list(dag, &node.reads.iter().copied().collect::<Vec<_>>());
         let writes = region_list(dag, &node.writes.iter().copied().collect::<Vec<_>>());
         let iters = node
@@ -152,7 +155,7 @@ fn region_list(dag: &TaskDag, regions: &[usize]) -> String {
         .map(|r| {
             dag.regions
                 .get(*r)
-                .map(|m| m.display())
+                .cloned()
                 .unwrap_or_else(|| format!("R{r}"))
         })
         .collect::<Vec<_>>()

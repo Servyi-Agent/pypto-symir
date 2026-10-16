@@ -1,5 +1,5 @@
 digraph {
-    0 [ label = "host:entry\lR:[x/c] W:[out]" ]
-    1 [ label = "mu0: [0, trip_while0)\lR:[x/c] W:[x/c]" ]
-    1 -> 0 [ label = "raw [x/c]" ]
+    0 [ label = "host:\lR:[x] W:[out]" ]
+    1 [ label = "mu0: [0, trip_while0)\lR:[x] W:[x]" ]
+    1 -> 0 [ label = "raw [x]" ]
 }

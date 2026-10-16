@@ -237,7 +237,7 @@ impl<'a> Interp<'a> {
                 Dir::Scalar => self.fresh_named(format!("param.{}", param.name)),
                 _ => SymVal::Region(self.fresh_region(&param.name)),
             };
-            self.bind(&param.name, value);
+            let _ = self.env.insert(param.name.clone(), value);
         }
         // Module-level constants: `NAME = pl.dynamic("NAME")` becomes a
         // symbolic dimension constant named by its string argument.
@@ -262,26 +262,8 @@ impl<'a> Interp<'a> {
     fn fresh_region(&mut self, name: &str) -> RegionId {
         let id = self.region_counter;
         self.region_counter += 1;
-        self.dag.regions.push(crate::dag::RegionMeta {
-            name: name.to_owned(),
-            aliases: Vec::new(),
-        });
+        self.dag.regions.push(name.to_owned());
         id
-    }
-
-    /// Binds `name` in the environment, recording region aliases: every
-    /// SSA name a region is reachable under appears in its label, so a
-    /// write through a carried alias (`init_values=(x,)` → `a`) shows as
-    /// `x/a` rather than contradicting the source.
-    fn bind(&mut self, name: &str, value: SymVal) {
-        if let SymVal::Region(region) = &value {
-            if let Some(meta) = self.dag.regions.get_mut(*region) {
-                if meta.name != name && !meta.aliases.iter().any(|a| a == name) {
-                    meta.aliases.push(name.to_owned());
-                }
-            }
-        }
-        let _ = self.env.insert(name.to_owned(), value);
     }
 
     /// A named uninterpreted constant (no arguments).
@@ -388,12 +370,12 @@ impl<'a> Interp<'a> {
     fn bind_targets(&mut self, targets: &[String], value: SymVal) -> Result<(), SymirError> {
         match (targets, &value) {
             ([single], _) => {
-                self.bind(single, value);
+                let _ = self.env.insert(single.clone(), value);
                 Ok(())
             }
             (_, SymVal::Tuple(items)) if targets.len() == items.len() => {
                 for (name, item) in targets.iter().zip(items.iter()) {
-                    self.bind(name, item.clone());
+                    let _ = self.env.insert(name.clone(), item.clone());
                 }
                 Ok(())
             }
@@ -507,7 +489,7 @@ impl<'a> Interp<'a> {
         }
         let init_values = self.init_values(kwargs)?;
         for (name, init) in iter_arg_vars.iter().zip(init_values) {
-            self.bind(name, init);
+            let _ = self.env.insert(name.clone(), init);
         }
 
         let outer_writers = self.frame_writers();
@@ -573,12 +555,7 @@ impl<'a> Interp<'a> {
         if parallel {
             for region in inner_writers.keys() {
                 if inner_readers.contains_key(region) {
-                    let name = self
-                        .dag
-                        .regions
-                        .get(*region)
-                        .map(|m| m.display())
-                        .unwrap_or_default();
+                    let name = self.dag.regions.get(*region).cloned().unwrap_or_default();
                     let mut roles = nodes.iter();
                     if let (Some(first), Some(second)) = (roles.next(), roles.last()) {
                         self.add_edge(*first, *second, EdgeKind::Race, vec![*region]);
@@ -981,7 +958,7 @@ impl<'a> Interp<'a> {
         let saved_env = self.env.clone();
         for (param, arg) in params.iter().zip(payload.iter()) {
             let value = self.eval(arg)?;
-            self.bind(&param.name, value);
+            let _ = self.env.insert(param.name.clone(), value);
         }
         self.exec_block(&body)?;
         // The return expression (if any) is evaluated in the inline scope.

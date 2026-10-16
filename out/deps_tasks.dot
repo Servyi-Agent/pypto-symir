@@ -1,5 +1,5 @@
 digraph {
-    0 [ label = "host:entry\lR:[] W:[]" ]
+    0 [ label = "host:\lR:[] W:[]" ]
     1 [ label = "stage_a\lR:[x] W:[mid]" ]
     2 [ label = "stage_b\lR:[mid] W:[out]" ]
     1 -> 2 [ label = "dep" ]

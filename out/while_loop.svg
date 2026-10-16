@@ -12,23 +12,23 @@
 <!-- 0 -->
 <g id="node1" class="node">
 <title>0</title>
-<ellipse fill="none" stroke="black" cx="117.38" cy="-26.87" rx="84.29" ry="26.74"/>
-<text text-anchor="start" x="65.88" y="-30.67" font-family="Times,serif" font-size="14.00">host:entry</text>
-<text text-anchor="middle" x="117.38" y="-15.67" font-family="Times,serif" font-size="14.00">R:[x/c] W:[out]</text>
+<ellipse fill="none" stroke="black" cx="117.38" cy="-26.87" rx="75.82" ry="26.74"/>
+<text text-anchor="start" x="71.88" y="-30.67" font-family="Times,serif" font-size="14.00">host:</text>
+<text text-anchor="middle" x="117.38" y="-15.67" font-family="Times,serif" font-size="14.00">R:[x] W:[out]</text>
 </g>
 <!-- 1 -->
 <g id="node2" class="node">
 <title>1</title>
 <ellipse fill="none" stroke="black" cx="117.38" cy="-131.61" rx="117.26" ry="26.74"/>
 <text text-anchor="start" x="42.38" y="-135.41" font-family="Times,serif" font-size="14.00">mu0: [0, trip_while0)</text>
-<text text-anchor="middle" x="117.38" y="-120.41" font-family="Times,serif" font-size="14.00">R:[x/c] W:[x/c]</text>
+<text text-anchor="middle" x="117.38" y="-120.41" font-family="Times,serif" font-size="14.00">R:[x] W:[x]</text>
 </g>
 <!-- 1&#45;&gt;0 -->
 <g id="edge1" class="edge">
 <title>1&#45;&gt;0</title>
 <path fill="none" stroke="black" d="M117.38,-104.68C117.38,-92.4 117.38,-77.51 117.38,-64.12"/>
 <polygon fill="black" stroke="black" points="120.88,-63.79 117.38,-53.79 113.88,-63.79 120.88,-63.79"/>
-<text text-anchor="middle" x="148.88" y="-75.54" font-family="Times,serif" font-size="14.00">raw [x/c]</text>
+<text text-anchor="middle" x="142.88" y="-75.54" font-family="Times,serif" font-size="14.00">raw [x]</text>
 </g>
 </g>
 </svg>
