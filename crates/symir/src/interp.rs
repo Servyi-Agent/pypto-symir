@@ -1057,6 +1057,12 @@ impl<'a> Interp<'a> {
                 return self.eval_inline_call(&callee, &payload);
             }
             if self.sigs.contains_key(&callee) {
+                // The recorded form binds one name to the kernel's result;
+                // the (result, task-id) tuple belongs to the pl.submit
+                // source form only.
+                if let SymVal::Tuple(items) = self.launch_task(&callee, &payload, kwargs)? {
+                    return Ok(items.first().cloned().unwrap_or(SymVal::Unit));
+                }
                 return self.launch_task(&callee, &payload, kwargs);
             }
         }
@@ -1155,17 +1161,27 @@ impl<'a> Interp<'a> {
             let mut arg_regions = Vec::new();
             value.regions(&mut arg_regions);
             let (do_read, do_write) = dir.effects();
-            for region in arg_regions {
-                if do_read {
+            if do_read {
+                for region in arg_regions {
                     reads.push(region);
                 }
-                if do_write {
+            }
+            if do_write {
+                let mut destinations = Vec::new();
+                value.dest_regions(&mut destinations);
+                for region in destinations {
                     writes.push(region);
                 }
             }
         }
         self.record_task_effects(node, &reads, &writes)?;
-        let result = self.fresh_named(format!("launch.{callee}"));
+        // The submit's return aliases its output argument — the compiler
+        // does the same (GenerateSubmitReturnAliases), so the result
+        // denotes that storage rather than a fresh value.
+        let result = match writes.first() {
+            Some(region) => SymVal::Region(*region),
+            None => self.fresh_named(format!("launch.{callee}")),
+        };
         Ok(SymVal::Tuple(vec![result, SymVal::Task { node }]))
     }
 
@@ -1562,19 +1578,26 @@ fn collect_op_effects(
     writes: &mut Vec<RegionId>,
 ) {
     if op == consts::OP_TENSOR_ASSEMBLE {
-        regions_in(values.first(), writes);
+        dest_regions_in(values.first(), writes);
         regions_in(values.get(consts::DUMP_PAYLOAD_INDEX), reads);
         return;
     }
     if op == consts::OP_STORE {
         regions_in(values.first(), reads);
-        regions_in(values.last(), writes);
+        dest_regions_in(values.last(), writes);
         return;
     }
     for value in values {
         let mut found = Vec::new();
         value.regions(&mut found);
         reads.extend(found);
+    }
+}
+
+/// Destination regions of an optional value.
+fn dest_regions_in(value: Option<&SymVal>, out: &mut Vec<RegionId>) {
+    if let Some(value) = value {
+        value.dest_regions(out);
     }
 }
 

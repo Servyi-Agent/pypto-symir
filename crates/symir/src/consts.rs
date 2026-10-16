@@ -104,6 +104,9 @@ pub const ADIR_SCALAR: &str = "scalar";
 pub const OP_TENSOR_ASSEMBLE: &str = "assemble";
 /// `buffer.store` / `tile.store` — writes its destination region.
 pub const OP_STORE: &str = "store";
+/// Ops whose result is a view of their first argument: as destinations
+/// they denote that argument's storage, not the reads nested in the term.
+pub const VIEW_FORMING_OPS: &[&str] = &["slice", "reshape", "view", "assemble"];
 /// Allocating ops introduce a fresh region.
 pub const OP_CREATE_TENSOR: &str = "create_tensor";
 pub const OP_BUFFER_ALLOC: &str = "alloc";

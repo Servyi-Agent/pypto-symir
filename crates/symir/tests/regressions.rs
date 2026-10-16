@@ -93,3 +93,64 @@ fn validator_rejects_dangling_endpoints() {
     }
     assert!(dag.validate().is_err(), "dangling edge must be rejected");
 }
+
+const SLICING: &str = include_str!("fixtures/slicing.py");
+
+/// Observed 2026-10-16 on the real slicing dump: two `assemble` calls
+/// writing disjoint halves of `out` reported `W:[x, out]` — the first
+/// assemble's result term embeds the *read* of `x`, and when that term
+/// became the second assemble's destination, read-transparency turned it
+/// into a write. Destinations need their own extraction: only the base
+/// region a view chain derives from, never the reads nested in the term.
+#[test]
+fn destination_extraction_never_turns_reads_into_writes() {
+    let dag = extract(SLICING, None).unwrap();
+    let host = &dag.nodes[0];
+    let out_region = dag
+        .regions
+        .iter()
+        .position(|r| r == "out")
+        .unwrap_or_default();
+    let x_region = dag
+        .regions
+        .iter()
+        .position(|r| r == "x")
+        .unwrap_or_default();
+    assert!(
+        host.writes.contains(&out_region),
+        "out is written by both assembles"
+    );
+    assert!(
+        !host.writes.contains(&x_region),
+        "x is only ever read (sliced reads), never written"
+    );
+    assert!(host.reads.contains(&x_region));
+}
+
+const SLICING_POST: &str = include_str!("fixtures/slicing_post.py");
+
+/// Observed 2026-10-16 on the real post-pass slicing dump: `_dump.call`
+/// carries the op name as a *string* argument; the extractor read it with
+/// `expr_text`, which returns "" for strings, so `tile.store` fell to the
+/// read-only default and the second kernel's write vanished (`W:[]`).
+#[test]
+fn dump_call_string_op_names_classify() {
+    let dag = extract(SLICING_POST, None).unwrap();
+    let out_region = dag
+        .regions
+        .iter()
+        .position(|r| r == "out__ssa_v0")
+        .unwrap_or_default();
+    for kernel in ["slicing_incore_0", "slicing_incore_1"] {
+        let node = dag
+            .nodes
+            .iter()
+            .find(|n| matches!(&n.kind, symir::dag::NodeKind::Task { callee } if callee == kernel))
+            .unwrap_or_else(|| panic!("{kernel} task present"));
+        assert!(
+            node.writes.contains(&out_region),
+            "{kernel} writes out through tile.store, got W:{:?}",
+            node.writes
+        );
+    }
+}

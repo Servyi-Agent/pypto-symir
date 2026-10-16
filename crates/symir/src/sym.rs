@@ -61,7 +61,46 @@ impl fmt::Display for SymVal {
     }
 }
 
+/// The base of a view chain: the first argument when `name` is a
+/// view-forming op.
+fn view_base<'a>(name: &str, args: &'a [SymVal]) -> Option<&'a SymVal> {
+    if crate::consts::VIEW_FORMING_OPS.contains(&name) {
+        args.first()
+    } else {
+        None
+    }
+}
+
 impl SymVal {
+    /// Collects the regions a value denotes AS STORAGE — for destinations.
+    ///
+    /// The mirror image of [`SymVal::regions`]: reads collect every region
+    /// mentioned anywhere (terms are read-transparent), but a destination
+    /// is only the base region a view chain derives from. Treating reads
+    /// and destinations the same way turns a read embedded in a view term
+    /// into a write (observed on the real slicing dump: two assembles
+    /// writing disjoint halves of `out` reported `W:[x, out]`).
+    ///
+    /// View-forming ops keep their first argument's destination; computed
+    /// values (arith results) denote no storage; tuples union their
+    /// elements' destinations.
+    pub fn dest_regions(&self, out: &mut Vec<RegionId>) {
+        match self {
+            SymVal::Region(id) => out.push(*id),
+            SymVal::Tuple(items) => {
+                for item in items {
+                    item.dest_regions(out);
+                }
+            }
+            SymVal::Uninterp { name, args } => {
+                if let Some(base) = view_base(name, args) {
+                    base.dest_regions(out);
+                }
+            }
+            _ => {}
+        }
+    }
+
     /// Collects the regions referenced anywhere inside this value.
     pub fn regions(&self, out: &mut Vec<RegionId>) {
         match self {

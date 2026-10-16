@@ -27,6 +27,8 @@ CLASSES = {
     "deepseek_indexer_pre.py": "_jit_entry",
     "manual_in_auto.py": "Probe0",
     "manual_via_inline.py": "Probe3",
+    "slicing.py": "_jit_slicing",
+    "slicing_post.py": "_jit_slicing",
 }
 
 failures = []
