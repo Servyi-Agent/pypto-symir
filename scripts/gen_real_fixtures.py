@@ -123,3 +123,33 @@ for name, kernel in (("range_carry_pre.py", range_carry), ("range_carry_post.py"
     # prove the underlying program compiles end to end before keeping it
     compiled = kernel.compile(_x, _out, config=RunConfig(arch=BackendType.Ascend950))
     print(name, f"<- {stage}() of a kernel that compiles ({compiled.output_dir})")
+
+
+# --- slicing: disjoint partial writes through tensor.slice/assemble -------
+@pl.jit
+def slicing(
+    x: pl.Tensor[[4, 8], pl.FP32],
+    out: pl.Out[pl.Tensor[[4, 8], pl.FP32]],
+):
+    with pl.at(level=pl.Level.CORE_GROUP):
+        out[0:2, :] = pl.mul(x[0:2, :], 2.0)
+    with pl.at(level=pl.Level.CORE_GROUP):
+        out[2:4, :] = pl.mul(x[2:4, :], 3.0)
+    return out
+
+
+import torch  # noqa: E402
+
+_sx = torch.ones(4, 8, dtype=torch.float32)
+_sout = torch.zeros(4, 8, dtype=torch.float32)
+_cfg = RunConfig(arch=BackendType.Ascend950, dump_passes=True)
+
+compiled = slicing.compile(_sx, _sout, config=_cfg)
+pdump = Path(compiled.output_dir) / "passes_dump"
+(FIX / "slicing.py").write_text(
+    slicing.specialize(_sx, _sout).as_python()
+)
+(FIX / "slicing_post.py").write_text(
+    (pdump / "59_after_LowerTileToBuffer.py").read_text()
+)
+print("slicing.py / slicing_post.py <- kernel compiles at", compiled.output_dir)
