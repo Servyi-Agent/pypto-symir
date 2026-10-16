@@ -1,0 +1,7 @@
+digraph {
+    0 [ label = "host:\\nR:[] W:[]" ]
+    1 [ label = "stage_a\\nR:[x] W:[mid]" ]
+    2 [ label = "stage_b\\nR:[mid] W:[out]" ]
+    1 -> 2 [ label = "dep" ]
+    1 -> 2 [ label = "raw [mid]" ]
+}

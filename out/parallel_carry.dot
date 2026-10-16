@@ -1,0 +1,8 @@
+digraph {
+    0 [ label = "host:\\nR:[x] W:[out]" ]
+    1 [ label = "mu0a: [0, 4)\\nR:[x] W:[x]" ]
+    2 [ label = "mu0b: [0, 4)\\nR:[x] W:[x]" ]
+    1 -> 2 [ label = "race [x]" ]
+    1 -> 0 [ label = "raw [x]" ]
+    2 -> 0 [ label = "raw [x]" ]
+}
