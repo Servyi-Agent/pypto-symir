@@ -27,6 +27,7 @@ CLASSES = {
     "deepseek_indexer_pre.py": "_jit_entry",
     "manual_in_auto.py": "Probe0",
     "manual_via_inline.py": "Probe3",
+    "deepseek_gate.py": "_jit_gate_test",
     "slicing.py": "_jit_slicing",
     "slicing_post.py": "_jit_slicing",
 }
@@ -37,6 +38,7 @@ CLASSES = {
 # are genuine compiler output; only the re-import is blocked.
 NON_ROUNDTRIP = {
     "slicing_post.py": "tile-stage auto names (t__tile_1) use the reserved __ delimiter",
+    "deepseek_gate.py": "printed gather(src, idx, dim=...) re-imports as multiple values for dim",
 }
 
 failures = []
@@ -48,7 +50,7 @@ for fname, cls in CLASSES.items():
         print(f"{fname:32} REAL: parser + passes + codegen OK")
     except Exception as e:  # noqa: BLE001
         first = next((ln for ln in str(e).splitlines() if ln.strip()), "")
-        if fname in NON_ROUNDTRIP and "reserved delimiter" in first:
+        if fname in NON_ROUNDTRIP and ("reserved delimiter" in first or "multiple values" in first):
             print(f"{fname:32} REAL dump; re-import blocked upstream: {NON_ROUNDTRIP[fname]}")
             continue
         print(f"{fname:32} REJECTED: {first[:120]}")

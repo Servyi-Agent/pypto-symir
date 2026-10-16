@@ -103,7 +103,9 @@ else_header = ${ KW_ELSE ~ ows ~ ":" }
 
 with_header = { KW_WITH ~ ows ~ expr ~ (ows ~ KW_AS ~ ows ~ ident)? ~ ows ~ ":" }
 
-return_stmt = { KW_RETURN ~ (ows ~ expr)? }
+return_stmt = { KW_RETURN ~ (ows ~ ret_items)? }
+// The printer emits unparenthesized multi-value returns: return a, b, c
+ret_items = _{ expr ~ (ows ~ "," ~ ows ~ expr)* ~ ows ~ ","? }
 pass_stmt = ${ KW_PASS }
 
 // ---------------------------------------------------------------------------
@@ -176,7 +178,12 @@ ident_start = @{ ASCII_ALPHA | "_" }
 ident_continue = @{ ASCII_ALPHANUMERIC | "_" }
 
 int_lit = @{ "-"? ~ ASCII_DIGIT+ }
-float_lit = @{ "-"? ~ ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT+ }
+// A float has a fraction, an exponent, or both — the printer emits full
+// precision reprs, e.g. -3.4028234663852886e+38 and 1e-5.
+float_lit = @{ "-"? ~ (float_frac | float_exp_only) }
+float_frac = ${ ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT+ ~ float_exp? }
+float_exp_only = ${ ASCII_DIGIT+ ~ float_exp }
+float_exp = { ("e" | "E") ~ ("+" | "-")? ~ ASCII_DIGIT+ }
 string_lit = ${ dq_string | sq_string }
 dq_string = { "\"" ~ dq_inner ~ "\"" }
 dq_inner = @{ (!("\"" | NEWLINE) ~ ANY)* }

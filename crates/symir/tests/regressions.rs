@@ -154,3 +154,24 @@ fn dump_call_string_op_names_classify() {
         );
     }
 }
+
+const DEEPSEEK_GATE: &str = include_str!("fixtures/deepseek_gate.py");
+
+/// Observed 2026-10-16 on pypto-lib's real DeepSeek MoE gate dump: the
+/// printer emits scientific-notation floats (`value=-3.4028234663852886e+38`)
+/// and unparenthesized multi-value returns (`return a, b, c, d`). Both are
+/// real printed-IR forms the grammar lacked; this fixture failed to parse
+/// before the fix (the parse failure was the red demonstration).
+#[test]
+fn deepseek_gate_fixture_parses_and_extracts() {
+    let dag = extract(DEEPSEEK_GATE, None).unwrap();
+    assert!(dag.nodes.len() > 20, "rich DAG, got {}", dag.nodes.len());
+    assert!(dag.constraints.len() > 20, "many loop bounds");
+    // The gate's chunk loop bound is a real symbolic term over a tensor dim.
+    assert!(
+        dag.constraints
+            .iter()
+            .any(|c| matches!(c, symir::dag::Constraint::Bounds { hi, .. } if hi.contains("dim("))),
+        "ceil((dim+7)/8)-style bounds present"
+    );
+}

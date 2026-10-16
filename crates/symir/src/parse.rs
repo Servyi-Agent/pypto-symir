@@ -174,7 +174,20 @@ fn classify(body: Pair<'_, Rule>, line_no: usize) -> Result<LineKind, SymirError
             })?;
             Ok(LineKind::With { scope, binder })
         }
-        Rule::return_stmt => Ok(LineKind::Return(only_expr_opt(body)?)),
+        Rule::return_stmt => {
+            // ret_items holds one expr or several (unparenthesized tuple).
+            let mut items = Vec::new();
+            for child in body.into_inner() {
+                if child.as_rule() == Rule::expr {
+                    items.push(build_expr(child)?);
+                }
+            }
+            Ok(LineKind::Return(match items.len() {
+                0 => None,
+                1 => items.pop(),
+                _ => Some(Expr::Tuple(items)),
+            }))
+        }
         Rule::pass_stmt => Ok(LineKind::Pass),
         Rule::statement => Ok(LineKind::Simple(stmt_of(body, line_no)?)),
         other => Err(SymirError::Unsupported {
@@ -506,16 +519,6 @@ fn only_expr(pair: Pair<'_, Rule>, line_no: usize) -> Result<Expr, SymirError> {
         line: line_no,
         message: crate::msgs::MSG_EXPECTED_EXPRESSION.to_owned(),
     })
-}
-
-/// Extracts the single `expr` child if present.
-fn only_expr_opt(pair: Pair<'_, Rule>) -> Result<Option<Expr>, SymirError> {
-    for child in pair.into_inner() {
-        if child.as_rule() == Rule::expr {
-            return Ok(Some(build_expr(child)?));
-        }
-    }
-    Ok(None)
 }
 
 /// Reads the sole identifier child of a header pair.
