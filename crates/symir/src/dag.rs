@@ -111,6 +111,9 @@ pub enum EdgeKind {
     Waw,
     /// Write after read.
     War,
+    /// A parallel loop's two unordered instances both touch a carried
+    /// region: a data race, not an ordering.
+    Race,
 }
 
 /// An uninterpreted-variable constraint.

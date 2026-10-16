@@ -51,6 +51,7 @@ pub fn to_dot(dag: &TaskDag) -> String {
             EdgeKind::Raw => format!("raw [{regions}]"),
             EdgeKind::Waw => format!("waw [{regions}]"),
             EdgeKind::War => format!("war [{regions}]"),
+            EdgeKind::Race => format!("race [{regions}]"),
         };
         out.push_str(&format!(
             "  n{} -> n{} [{lbl}={q}{tag}{q}, {sty}={q}{style}{q}];\n",

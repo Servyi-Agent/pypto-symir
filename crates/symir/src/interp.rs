@@ -308,14 +308,23 @@ impl<'a> Interp<'a> {
     }
 
     fn add_edge(&mut self, from: usize, to: usize, kind: EdgeKind, regions: Vec<RegionId>) {
-        if from != to {
-            self.dag.edges.push(DagEdge {
-                from,
-                to,
-                kind,
-                regions,
-            });
+        if from == to {
+            return;
         }
+        if self
+            .dag
+            .edges
+            .iter()
+            .any(|e| e.from == from && e.to == to && e.kind == kind && e.regions == regions)
+        {
+            return;
+        }
+        self.dag.edges.push(DagEdge {
+            from,
+            to,
+            kind,
+            regions,
+        });
     }
 
     // -- statements ---------------------------------------------------------------
@@ -422,13 +431,19 @@ impl<'a> Interp<'a> {
         let nodes: Vec<usize> = if parallel {
             let a = self.push_node(
                 NodeKind::ParInstance { role: ParRole::A },
-                format!("{ITER_VAR_PREFIX}{loop_id}{}", consts::SUFFIX_PAR_A),
+                format!(
+                    "{ITER_VAR_PREFIX}{loop_id}{}: [{lo}, {hi})",
+                    consts::SUFFIX_PAR_A
+                ),
                 iter_ctx.clone(),
                 guards.clone(),
             );
             let b = self.push_node(
                 NodeKind::ParInstance { role: ParRole::B },
-                format!("{ITER_VAR_PREFIX}{loop_id}{}", consts::SUFFIX_PAR_B),
+                format!(
+                    "{ITER_VAR_PREFIX}{loop_id}{}: [{lo}, {hi})",
+                    consts::SUFFIX_PAR_B
+                ),
                 iter_ctx.clone(),
                 guards.clone(),
             );
@@ -538,6 +553,10 @@ impl<'a> Interp<'a> {
             for region in inner_writers.keys() {
                 if inner_readers.contains_key(region) {
                     let name = self.dag.regions.get(*region).cloned().unwrap_or_default();
+                    let mut roles = nodes.iter();
+                    if let (Some(first), Some(second)) = (roles.next(), roles.last()) {
+                        self.add_edge(*first, *second, EdgeKind::Race, vec![*region]);
+                    }
                     for node in &nodes {
                         self.dag.warnings.push(Warning {
                             node: *node,
