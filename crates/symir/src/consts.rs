@@ -175,5 +175,10 @@ pub const BOUND_STOP_INDEX: usize = 1;
 pub const DUMP_PAYLOAD_INDEX: usize = 1;
 /// DOT graph closing line.
 pub const DOT_CLOSE: &str = "}\n";
+/// Duplicate-edge scan skips nothing after this offset (the first edge
+/// cannot duplicate anything before it).
+pub const EDGE_UNIQUENESS_SKIP: usize = 1;
+/// How many occurrences of one edge shape are allowed.
+pub const EDGE_SINGLE_OCCURRENCE: usize = 1;
 /// List separator used when joining terms.
 pub const SEP_COMMA_SPACE: &str = ", ";

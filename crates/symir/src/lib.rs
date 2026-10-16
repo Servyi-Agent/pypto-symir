@@ -33,5 +33,7 @@ pub use error::SymirError;
 /// Parses and interprets one printed program in a single call.
 pub fn extract(src: &str, entry: Option<&str>) -> Result<TaskDag, SymirError> {
     let program = parse::parse_program(src)?;
-    interp::interpret(&program, entry)
+    let dag = interp::interpret(&program, entry)?;
+    dag.validate()?;
+    Ok(dag)
 }

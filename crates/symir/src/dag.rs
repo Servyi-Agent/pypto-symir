@@ -8,6 +8,8 @@
 
 use std::collections::BTreeSet;
 
+use crate::consts;
+
 use serde::Serialize;
 
 /// Identity of a memory region (tensor / buffer / tile allocation).
@@ -143,6 +145,65 @@ pub struct Warning {
 }
 
 impl TaskDag {
+    /// Structural invariants every extracted DAG must satisfy. Run by
+    /// [`crate::extract`] on every interpretation — the runtime assertion
+    /// layer for graph-shaped regressions (duplicate edges, dangling
+    /// endpoints, warnings naming absent nodes).
+    pub fn validate(&self) -> Result<(), crate::SymirError> {
+        use crate::SymirError;
+        let node_count = self.nodes.len();
+        for edge in &self.edges {
+            if edge.from >= node_count || edge.to >= node_count {
+                return Err(SymirError::Interp {
+                    line: 0,
+                    message: format!(
+                        "edge n{} -> n{} references a node outside the graph ({node_count} nodes)",
+                        edge.from, edge.to
+                    ),
+                });
+            }
+            if edge.from == edge.to {
+                return Err(SymirError::Interp {
+                    line: 0,
+                    message: format!("self-edge on node {}", edge.from),
+                });
+            }
+        }
+        for later in self.edges.iter().skip(consts::EDGE_UNIQUENESS_SKIP) {
+            let twins = self
+                .edges
+                .iter()
+                .filter(|e| {
+                    e.from == later.from
+                        && e.to == later.to
+                        && e.kind == later.kind
+                        && e.regions == later.regions
+                })
+                .count();
+            if twins > consts::EDGE_SINGLE_OCCURRENCE {
+                return Err(SymirError::Interp {
+                    line: 0,
+                    message: format!(
+                        "duplicate edge n{} -> n{} ({:?}) appears {twins} times",
+                        later.from, later.to, later.kind
+                    ),
+                });
+            }
+        }
+        for warning in &self.warnings {
+            if warning.node >= node_count {
+                return Err(SymirError::Interp {
+                    line: 0,
+                    message: format!(
+                        "warning names node {} outside the graph ({node_count} nodes)",
+                        warning.node
+                    ),
+                });
+            }
+        }
+        Ok(())
+    }
+
     /// The printed name of a node's iteration variables.
     pub fn iter_names(&self, node: usize) -> Vec<String> {
         self.nodes
