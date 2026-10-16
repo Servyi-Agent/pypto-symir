@@ -13,7 +13,7 @@
 <g id="node1" class="node">
 <title>0</title>
 <ellipse fill="none" stroke="black" cx="2075.27" cy="-489.58" rx="285.84" ry="26.74"/>
-<text text-anchor="start" x="1881.27" y="-493.38" font-family="Times,serif" font-size="14.00">host:</text>
+<text text-anchor="start" x="1881.27" y="-493.38" font-family="Times,serif" font-size="14.00">host:entry</text>
 <text text-anchor="middle" x="2075.27" y="-478.38" font-family="Times,serif" font-size="14.00">R:[query, index_cache, index_cache_scale, output] W:[]</text>
 </g>
 <!-- 2 -->

@@ -182,6 +182,8 @@ pub const GRAPH_KIND_HOST: &str = "host:";
 pub const BACKSLASH_N: &str = "\\n";
 /// A real newline inside graphviz labels.
 pub const LABEL_NEWLINE: &str = "\n";
+/// Separator between a region's origin name and its aliases.
+pub const SEP_ALIAS: &str = "/";
 /// Guard separator in node labels.
 pub const SEP_GUARD: &str = " && ";
 /// Edge tags.

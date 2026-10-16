@@ -33,8 +33,30 @@ pub struct TaskDag {
     pub constraints: Vec<Constraint>,
     /// Race-shaped findings.
     pub warnings: Vec<Warning>,
-    /// Region names, indexed by id.
-    pub regions: Vec<String>,
+    /// Region metadata, indexed by id.
+    pub regions: Vec<RegionMeta>,
+}
+
+/// One region's naming: the origin (the parameter or allocation that
+/// created it) plus every SSA alias it became reachable under (e.g. a
+/// carried value seeded by `init_values=(x,)`).
+#[derive(Debug, Clone, Serialize)]
+pub struct RegionMeta {
+    /// Name of the creating binding.
+    pub name: String,
+    /// Other names bound to this region, sorted.
+    pub aliases: Vec<String>,
+}
+
+impl RegionMeta {
+    /// The display form: `x` alone, or `x/a` when aliased.
+    pub fn display(&self) -> String {
+        if self.aliases.is_empty() {
+            return self.name.clone();
+        }
+        let joined = self.aliases.join(consts::SEP_ALIAS);
+        format!("{}{}{}", self.name, consts::SEP_ALIAS, joined)
+    }
 }
 
 /// What a node represents.
