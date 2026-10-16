@@ -28,7 +28,9 @@ establishes.
     the loop summary nodes (the classic hierarchical task graph).
 * A region **both read and written** inside a parallel loop is a carried
   dependency — since `muNa != muNb` are unordered, that is reported as a
-  **race warning**.
+  **race warning**. Advisory only: the rule is region-granular and will be
+  superseded by real race analysis
+  ([#1](https://github.com/Servyi-Agent/pypto-symir/issues/1)).
 
 ## Install and run
 

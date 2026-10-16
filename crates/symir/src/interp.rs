@@ -549,6 +549,9 @@ impl<'a> Interp<'a> {
         }
 
         // Parallel carry = unordered read+write of one region: a race.
+        // ADVISORY ONLY: region-granular set intersection, superseded by
+        // offset- and sync-aware pair reasoning — see
+        // https://github.com/Servyi-Agent/pypto-symir/issues/1
         if parallel {
             for region in inner_writers.keys() {
                 if inner_readers.contains_key(region) {
