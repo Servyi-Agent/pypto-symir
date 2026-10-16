@@ -108,13 +108,11 @@ fn labels_carry_real_newlines_not_escape_sequences() {
         !dot.contains(consts_backslash_n()),
         "DOT output still carries the literal two-character \\n sequence"
     );
-    let node_label_count = dot
-        .split('\n')
-        .filter(|line| line.contains("R:[") && line.contains("W:["))
-        .count();
+    // Real line breaks: the effect summary appears on its own line, which
+    // only happens when labels carry actual newline characters.
     assert!(
         node_count_with_effects(&dot) > 0,
-        "effect summaries present"
+        "effect summaries present on their own lines"
     );
 }
 
