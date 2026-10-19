@@ -1324,12 +1324,6 @@ impl<'a> Interp<'a> {
                 }
             }
             let _ = self.frame().writers.insert(*region, frame_nodes.clone());
-            let entry = self.frame().readers.entry(*region).or_default();
-            for target in &frame_nodes {
-                if !entry.contains(target) {
-                    entry.push(*target);
-                }
-            }
         }
         Ok(())
     }
@@ -1370,10 +1364,6 @@ impl<'a> Interp<'a> {
                 }
             }
             let _ = self.frame().writers.insert(*region, vec![node]);
-            let entry = self.frame().readers.entry(*region).or_default();
-            if !entry.contains(&node) {
-                entry.push(node);
-            }
         }
         Ok(())
     }
@@ -1647,7 +1637,17 @@ fn collect_op_effects(
     }
     if op == consts::OP_STORE {
         regions_in(values.first(), reads);
-        dest_regions_in(values.last(), writes);
+        // The 3-arg form ends with the destination; the 4-arg tile form
+        // ends with a shape list — the destination is the last argument
+        // that actually denotes storage.
+        let mut dest: Vec<crate::dag::RegionId> = Vec::new();
+        for value in values.iter().rev() {
+            dest_regions_in(Some(value), &mut dest);
+            if !dest.is_empty() {
+                break;
+            }
+        }
+        writes.extend(dest);
         return;
     }
     for value in values {

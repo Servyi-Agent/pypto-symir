@@ -64,7 +64,10 @@ impl fmt::Display for SymVal {
 /// The base of a view chain: the first argument when `name` is a
 /// view-forming op.
 fn view_base<'a>(name: &str, args: &'a [SymVal]) -> Option<&'a SymVal> {
-    if crate::consts::VIEW_FORMING_OPS.contains(&name) {
+    // Numbered terms carry a `tN=` prefix for display; the op name is
+    // what follows it, and that is what view detection must compare.
+    let base = name.rsplit(crate::consts::CHAR_EQ).next().unwrap_or(name);
+    if crate::consts::VIEW_FORMING_OPS.contains(&base) {
         args.first()
     } else {
         None

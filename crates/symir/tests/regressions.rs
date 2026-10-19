@@ -213,7 +213,7 @@ fn gate_zero_fill_writes_and_local_buffers_are_effects() {
             "local region {expected} present, got {:?}",
             dag.regions
         );
-    };
+    }
     // The gate's internal chain (xg producers -> consumers) must produce
     // ordering edges far beyond the single 6->18 section edge.
     assert!(
@@ -221,4 +221,67 @@ fn gate_zero_fill_writes_and_local_buffers_are_effects() {
         "buffer-chained ordering edges, got {}",
         dag.edges.len()
     );
+}
+
+/// The confirmation table: expected per-section effects of the real gate
+/// fixture, read off its pypto-lib source. Red on 2026-10-19: (a) 4-arg
+/// tile.store(dest, shape) lost the write (dest rule took the shape list);
+/// (b) writers were being added to readers, inflating R sets.
+#[test]
+fn gate_section_effects_match_source() {
+    let dag = extract(DEEPSEEK_GATE, None).unwrap();
+    let reg = |name: &str| dag.regions.iter().position(|r| r == name);
+    let scratch = [
+        "quant_tmp",
+        "quant_pack_tmp",
+        "gate_logits_tile",
+        "topk_idx_tile",
+        "sr_idx_init",
+        "topk_idx_read",
+        "local_scores",
+    ];
+    let expected: &[(usize, &[&str], &[&str])] = &[
+        (1, &["x_mixed", "norm_w"], &["x_normed"]),
+        (4, &[], &["xg_buf"]),
+        (5, &["x_normed"], &["xg_buf"]),
+        (6, &["xg_buf"], &["x_norm_mx", "x_norm_scale"]),
+        (8, &[], &["indices", "weights"]),
+        (10, &["gate_w", "gate_bias", "xg_buf"], &["route_scores_buf", "biased_scores_buf"]),
+    ];
+    for (id, exp_r, exp_w) in expected {
+        let node = &dag.nodes[*id];
+        let reads: Vec<&str> = node
+            .reads
+            .iter()
+            .filter_map(|r| dag.regions.get(*r).map(|s| s.as_str()))
+            .filter(|r| !scratch.contains(r))
+            .collect();
+        let writes: Vec<&str> = node
+            .writes
+            .iter()
+            .filter_map(|r| dag.regions.get(*r).map(|s| s.as_str()))
+            .filter(|r| !scratch.contains(r))
+            .collect();
+        let want_r: Vec<&str> = exp_r.to_vec();
+        let want_w: Vec<&str> = exp_w.to_vec();
+        let mut rd = reads.clone();
+        rd.sort();
+        let mut wr = writes.clone();
+        wr.sort();
+        let mut wtr = want_r.clone();
+        wtr.sort();
+        let mut wtw = want_w.clone();
+        wtw.sort();
+        assert_eq!(
+            rd, wtr,
+            "node {id} reads (got {:?} want {:?})",
+            reads, want_r
+        );
+        assert_eq!(
+            wr, wtw,
+            "node {id} writes (got {:?} want {:?})",
+            writes, want_w
+        );
+    }
+    let _ = reg("xg_buf");
 }
