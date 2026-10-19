@@ -337,7 +337,7 @@ fn indexer_section_effects_match_source() {
             .filter_map(|i| dag.regions.get(*i).cloned())
             .collect()
     };
-    let mut sorted = |v: Vec<String>| {
+    let sorted = |v: Vec<String>| {
         let mut v = v;
         v.sort();
         v
