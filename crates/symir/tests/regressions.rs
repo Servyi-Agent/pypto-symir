@@ -321,3 +321,60 @@ fn dump_path_op_names_classify_by_leaf() {
         task.writes
     );
 }
+
+const DEEPSEEK_INDEXER: &str = include_str!("fixtures/deepseek_indexer_pre.py");
+
+/// Variable-level effects table for the real indexer dump: host reads are
+/// exactly the dim/reshape operands; the pairing scan reads only
+/// request_ids; the paired-block path's scratch (lut/key_scale/pair_scale)
+/// and the page paths' scratch (query_scale/scale) match the per-variant
+/// scratch in the pypto-lib source; topk loops read/write output only.
+#[test]
+fn indexer_section_effects_match_source() {
+    let dag = extract(DEEPSEEK_INDEXER, None).unwrap();
+    let set = |ids: &std::collections::BTreeSet<usize>| -> Vec<String> {
+        ids.iter()
+            .filter_map(|i| dag.regions.get(*i).cloned())
+            .collect()
+    };
+    let mut sorted = |v: Vec<String>| {
+        let mut v = v;
+        v.sort();
+        v
+    };
+    // host
+    assert_eq!(
+        sorted(set(&dag.nodes[0].reads)),
+        vec!["index_cache", "index_cache_scale", "output", "query"],
+        "host reads = the dim/reshape operands"
+    );
+    assert!(dag.nodes[0].writes.is_empty());
+    // pairing scan
+    assert_eq!(sorted(set(&dag.nodes[1].reads)), vec!["request_ids"]);
+    assert!(dag.nodes[1].writes.is_empty());
+    // paired-block task: all 10 params + own scratch; writes output + scratch
+    let task = dag.nodes.iter().find(|n| matches!(&n.kind, symir::dag::NodeKind::Task { callee } if callee.contains("paired_block"))).unwrap();
+    assert_eq!(set(&task.reads).len(), 13);
+    assert_eq!(
+        sorted(set(&task.writes)),
+        vec!["key_scale_tmp", "lut_tmp", "output", "pair_scale_tmp"]
+    );
+    // page task: its own scratch set
+    let page = dag.nodes.iter().find(|n| matches!(&n.kind, symir::dag::NodeKind::Task { callee } if callee.contains("page_mxfp8"))).unwrap();
+    assert_eq!(
+        sorted(set(&page.writes)),
+        vec![
+            "lut_tmp",
+            "output",
+            "pair_scale_tmp",
+            "query_scale_tmp",
+            "scale_tmp"
+        ]
+    );
+    // topk loops: output + request_ids in, output out
+    assert_eq!(
+        sorted(set(&dag.nodes[18].reads)),
+        vec!["output", "request_ids"]
+    );
+    assert_eq!(sorted(set(&dag.nodes[18].writes)), vec!["output"]);
+}
