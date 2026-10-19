@@ -294,3 +294,30 @@ fn gate_section_effects_match_source() {
     }
     let _ = reg("xg_buf");
 }
+
+const RANGE_CARRY_POST: &str = include_str!("fixtures/range_carry_post.py");
+
+/// Observed 2026-10-19 auditing variable-level effects across fixtures:
+/// the post-pass carry task's output_existing argument is a slice view of
+/// the carried buffer, but its write was lost — the `_dump.call` path
+/// passes FULL dotted op names ("tensor.slice") while writer/view/alloc
+/// classification is leaf-based ("slice"). Leaf-normalize at entry.
+#[test]
+fn dump_path_op_names_classify_by_leaf() {
+    let dag = extract(RANGE_CARRY_POST, None).unwrap();
+    let task = dag
+        .nodes
+        .iter()
+        .find(|n| matches!(&n.kind, symir::dag::NodeKind::Task { callee } if callee == "range_carry_incore_0"))
+        .unwrap();
+    let x_region = dag
+        .regions
+        .iter()
+        .position(|r| r == "x__ssa_v0")
+        .unwrap_or_default();
+    assert!(
+        task.writes.contains(&x_region),
+        "carry task writes the carried buffer through its slice-view output, got W:{:?}",
+        task.writes
+    );
+}

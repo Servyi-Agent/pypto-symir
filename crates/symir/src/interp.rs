@@ -1115,7 +1115,13 @@ impl<'a> Interp<'a> {
                 return self.launch_task(&callee, &payload, kwargs);
             }
         }
-        let op = expr_text(head);
+        // The op name is the STRING argument for recorded ops
+        // (`_dump.call("tensor.slice", ...)`); `expr_text` of a string is
+        // empty, which silently dropped every classification.
+        let op = match head {
+            Expr::Str(text) => text.clone(),
+            other => expr_text(other),
+        };
         let mut values = Vec::new();
         for item in &payload {
             values.push(self.eval(item)?);
@@ -1255,9 +1261,17 @@ impl<'a> Interp<'a> {
         vec![Dir::Unknown; payload.len()]
     }
 
+    /// The classification leaf of an op name: the segment after the last
+    /// dot, so `_dump.call`'s full names ("tensor.slice") and direct
+    /// calls' leaf ("slice") classify identically.
+    fn op_leaf(op: &str) -> &str {
+        op.rsplit(consts::CHAR_DOT).next().unwrap_or(op)
+    }
+
     /// Memory effects of an op call at the current level; fresh allocations
     /// bind a new region.
     fn op_call(&mut self, op: &str, values: &[SymVal]) -> Result<SymVal, SymirError> {
+        let op = Self::op_leaf(op);
         let mut reads = Vec::new();
         let mut writes = Vec::new();
         if is_alloc_op(op) {

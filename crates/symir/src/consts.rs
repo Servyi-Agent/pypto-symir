@@ -158,6 +158,8 @@ pub const TOK_LE: &str = "<=";
 pub const TOK_GT: &str = ">";
 pub const TOK_GE: &str = ">=";
 
+/// The attribute/namespace separator.
+pub const CHAR_DOT: char = '.';
 /// Separator between a numbered term's display prefix and its op name.
 pub const CHAR_EQ: char = '=';
 /// How far one step through the flat line list moves.

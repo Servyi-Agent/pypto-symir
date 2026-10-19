@@ -4,5 +4,4 @@ digraph {
     2 [ label = "slicing_incore_1\lR:[x__ssa_v0, out__ssa_v0] W:[out__ssa_v0]" ]
     1 -> 2 [ label = "raw [out__ssa_v0]" ]
     1 -> 2 [ label = "waw [out__ssa_v0]" ]
-    1 -> 2 [ label = "war [out__ssa_v0]" ]
 }
