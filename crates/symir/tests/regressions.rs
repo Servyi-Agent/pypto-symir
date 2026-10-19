@@ -175,3 +175,50 @@ fn deepseek_gate_fixture_parses_and_extracts() {
         "ceil((dim+7)/8)-style bounds present"
     );
 }
+
+/// Observed 2026-10-19 auditing the real DeepSeek gate fixture against its
+/// source: (1) `pl.write(dst, [i], v)` fell to the read-only default, so
+/// the indices/weights zero-fill was recorded as a READ; (2) the printed
+/// allocation op is `pl.tensor.create` (leaf `create`) while the alloc
+/// table knew only `create_tensor` — every local buffer (xg_buf,
+/// route_scores_buf, local_scores, ...) was a term, not a region, and the
+/// gate's internal ordering chain was absent from the graph.
+#[test]
+fn gate_zero_fill_writes_and_local_buffers_are_effects() {
+    let dag = extract(DEEPSEEK_GATE, None).unwrap();
+    let idx = dag
+        .regions
+        .iter()
+        .position(|r| r == "indices")
+        .unwrap_or_default();
+    let wgt = dag
+        .regions
+        .iter()
+        .position(|r| r == "weights")
+        .unwrap_or_default();
+    // The zero-fill loops (mu7/mu8 and mu19/mu20) write, not read.
+    for id in [8, 9, 20, 21] {
+        let node = &dag.nodes[id];
+        assert!(
+            node.writes.contains(&idx) && node.writes.contains(&wgt),
+            "node {id} must write indices+weights, got R:{:?} W:{:?}",
+            node.reads,
+            node.writes
+        );
+    }
+    // Local buffers exist as regions, named after their bindings.
+    for expected in ["xg_buf", "route_scores_buf", "local_scores"] {
+        assert!(
+            dag.regions.iter().any(|r| r == expected),
+            "local region {expected} present, got {:?}",
+            dag.regions
+        );
+    };
+    // The gate's internal chain (xg producers -> consumers) must produce
+    // ordering edges far beyond the single 6->18 section edge.
+    assert!(
+        dag.edges.len() > 12,
+        "buffer-chained ordering edges, got {}",
+        dag.edges.len()
+    );
+}

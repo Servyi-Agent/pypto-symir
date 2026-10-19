@@ -107,8 +107,18 @@ pub const OP_STORE: &str = "store";
 /// Ops whose result is a view of their first argument: as destinations
 /// they denote that argument's storage, not the reads nested in the term.
 pub const VIEW_FORMING_OPS: &[&str] = &["slice", "reshape", "view", "assemble"];
-/// Allocating ops introduce a fresh region.
+/// Element write: `write(dst, [idx], value)`.
+pub const OP_WRITE: &str = "write";
+/// Allocating ops introduce a fresh region. The printed forms vary:
+/// `pl.create_tensor` and `pl.tensor.create` (leaf `create`), `pl.full`.
 pub const OP_CREATE_TENSOR: &str = "create_tensor";
+pub const OP_TENSOR_CREATE: &str = "create";
+/// Constant initializer (`tile.full(..., value=const)`): a materialized
+/// VALUE, deliberately not an allocation — scratch constants are
+/// task-private and must not order anything (a cycle appeared when it
+/// was modeled as storage; red-demonstrated by the indexer fixture).
+pub const OP_FULL: &str = "full";
+pub const OP_CREATE_TILE: &str = "create_tile";
 pub const OP_BUFFER_ALLOC: &str = "alloc";
 pub const OP_TILE_ALLOC: &str = "alloc_tile";
 

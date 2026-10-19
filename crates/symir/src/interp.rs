@@ -82,6 +82,8 @@ pub struct Interp<'a> {
     inline_depth: usize,
     /// Innermost tracking-scope mode stack (`pl.scope` / `pl.manual_scope`).
     scope_modes: Vec<ScopeMode>,
+    /// Loop-id -> representative node ids (for ancestor checks).
+    loop_nodes: HashMap<usize, Vec<usize>>,
 }
 
 /// Extracts the DAG from `prog`, interpreting `entry` (or the detected
@@ -102,6 +104,7 @@ pub fn interpret(prog: &Program, entry: Option<&str>) -> Result<TaskDag, SymirEr
         loop_counter: 0,
         inline_depth: 0,
         scope_modes: Vec::new(),
+        loop_nodes: HashMap::new(),
     };
     interp.run(&chosen)?;
     interp.flag_manual_unordered();
@@ -313,8 +316,37 @@ impl<'a> Interp<'a> {
         id
     }
 
+    /// True when `maybe_ancestor` is a strict loop-ancestor of `node`
+    /// (walks the parent_loop chain through the loop-id -> nodes map).
+    fn is_loop_ancestor(&self, maybe_ancestor: usize, node: usize) -> bool {
+        let mut current = self.dag.nodes.get(node).and_then(|n| n.parent_loop);
+        while let Some(loop_id) = current {
+            let Some(reps) = self.loop_nodes.get(&loop_id) else {
+                return false;
+            };
+            if reps.contains(&maybe_ancestor) {
+                return true;
+            }
+            current = self
+                .dag
+                .nodes
+                .get(*reps.first().unwrap_or(&node))
+                .and_then(|n| n.parent_loop);
+        }
+        false
+    }
+
     fn add_edge(&mut self, from: usize, to: usize, kind: EdgeKind, regions: Vec<RegionId>) {
         if from == to {
+            return;
+        }
+        // Ordering inside one loop body is by construction: the body is
+        // interpreted in statement order, and a loop's effects roll up
+        // into its own node. Edges between a loop and its own nested
+        // loops (or the reverse) are spurious — they attributed body-op
+        // writes to the loop node and closed cycles (red-demonstrated by
+        // the indexer and gate fixtures after the write/create fixes).
+        if self.is_loop_ancestor(from, to) || self.is_loop_ancestor(to, from) {
             return;
         }
         if self
@@ -345,7 +377,21 @@ impl<'a> Interp<'a> {
     fn exec_stmt(&mut self, stmt: &Stmt) -> Result<(), SymirError> {
         match stmt {
             Stmt::Assign { targets, value, .. } => {
+                // Name a freshly allocated region after its binding: the
+                // op name (`create`) carries no information; the variable
+                // name (xg_buf, route_scores_buf, ...) is what the source
+                // and the graph should agree on.
+                let before = self.region_counter;
                 let val = self.eval(value)?;
+                if let SymVal::Region(region) = &val {
+                    if *region >= before {
+                        if let (Some(target), Some(name)) =
+                            (targets.first(), self.dag.regions.get_mut(*region))
+                        {
+                            *name = target.clone();
+                        }
+                    }
+                }
                 self.bind_targets(targets, val)
             }
             Stmt::If { arms } => self.exec_if(arms),
@@ -478,6 +524,7 @@ impl<'a> Interp<'a> {
                 iter_ctx.clone(),
                 guards.clone(),
             );
+            let _ = self.loop_nodes.insert(loop_id, vec![node]);
             self.dag.constraints.push(Constraint::Bounds {
                 loop_id,
                 var: mu.clone(),
@@ -486,6 +533,7 @@ impl<'a> Interp<'a> {
             });
             vec![node]
         };
+        let _ = self.loop_nodes.insert(loop_id, nodes.clone());
 
         let iter_val = SymVal::Iter {
             loop_id,
@@ -654,6 +702,7 @@ impl<'a> Interp<'a> {
             iter_ctx.clone(),
             guards,
         );
+        let _ = self.loop_nodes.insert(loop_id, vec![node]);
         self.dag.constraints.push(Constraint::Bounds {
             loop_id,
             var: mu.clone(),
@@ -1547,7 +1596,11 @@ fn adir_path(leaf: &str) -> String {
 
 /// True for the allocating ops.
 fn is_alloc_op(op: &str) -> bool {
-    op == consts::OP_CREATE_TENSOR || op == consts::OP_BUFFER_ALLOC || op == consts::OP_TILE_ALLOC
+    op == consts::OP_CREATE_TENSOR
+        || op == consts::OP_TENSOR_CREATE
+        || op == consts::OP_CREATE_TILE
+        || op == consts::OP_BUFFER_ALLOC
+        || op == consts::OP_TILE_ALLOC
 }
 
 /// Folds concrete binary operations.
@@ -1580,6 +1633,16 @@ fn collect_op_effects(
     if op == consts::OP_TENSOR_ASSEMBLE {
         dest_regions_in(values.first(), writes);
         regions_in(values.get(consts::DUMP_PAYLOAD_INDEX), reads);
+        return;
+    }
+    if op == consts::OP_WRITE {
+        // write(dst, [idx], value): writes the destination, reads the value.
+        dest_regions_in(values.first(), writes);
+        for value in values.iter().skip(consts::SKIP_CALLEE) {
+            let mut found = Vec::new();
+            value.regions(&mut found);
+            reads.extend(found);
+        }
         return;
     }
     if op == consts::OP_STORE {

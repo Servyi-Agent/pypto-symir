@@ -184,7 +184,15 @@ fn real_deepseek_indexer_extracts_a_rich_dag() {
     let dag = extract(DEEPSEEK_INDEXER, None).unwrap();
     // 428-line real dump: host + spmd tasks + the loop nest.
     assert!(dag.nodes.len() > 20, "rich DAG, got {}", dag.nodes.len());
-    assert!(dag.edges.len() > 10, "many edges, got {}", dag.edges.len());
+    // After loop-ancestor edge suppression (ordering inside one loop
+    // body is by construction), the indexer's cross-section guarantees
+    // are the war[output] edges from the host's post-hoc read plus the
+    // section edges — a handful, all real.
+    assert!(
+        dag.edges.len() >= 3,
+        "cross-section edges, got {}",
+        dag.edges.len()
+    );
     assert!(
         dag.constraints.len() > 20,
         "loop bounds constraints, got {}",
