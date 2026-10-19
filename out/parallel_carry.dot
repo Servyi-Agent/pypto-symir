@@ -1,5 +1,5 @@
 digraph {
-    0 [ label = "host:\lR:[x, acc] W:[out]" ]
+    0 [ label = "host:\lR:[acc] W:[out]" ]
     1 [ label = "mu0a: [0, 4)\lR:[x, acc] W:[acc]" ]
     2 [ label = "mu0b: [0, 4)\lR:[x, acc] W:[acc]" ]
     1 -> 2 [ label = "race [acc]" ]

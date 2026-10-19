@@ -246,7 +246,16 @@ fn gate_section_effects_match_source() {
         (5, &["x_normed"], &["xg_buf"]),
         (6, &["xg_buf"], &["x_norm_mx", "x_norm_scale"]),
         (8, &[], &["indices", "weights"]),
-        (10, &["gate_w", "gate_bias", "xg_buf"], &["route_scores_buf", "biased_scores_buf"]),
+        (
+            10,
+            &["gate_w", "gate_bias", "xg_buf"],
+            &["route_scores_buf", "biased_scores_buf"],
+        ),
+        (
+            12,
+            &["route_scores_buf", "biased_scores_buf"],
+            &["indices", "weights"],
+        ),
     ];
     for (id, exp_r, exp_w) in expected {
         let node = &dag.nodes[*id];

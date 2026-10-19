@@ -1268,6 +1268,16 @@ impl<'a> Interp<'a> {
         }
         collect_op_effects(op, values, &mut reads, &mut writes);
         self.record_effects(&reads, &writes)?;
+        // Memory-destinating ops (assemble/store/write) return their
+        // destination REGION, not a term wrapping the producer tree: the
+        // value is the buffer after the write (the compiler's own return
+        // aliasing), and read-transparency must not carry the producer
+        // history into later readers — those regions were consumed here,
+        // by this node (red-demonstrated by the gate table: the topk
+        // inherited the matmul's xg_buf/gate_w reads transitively).
+        if let Some(primary) = writes.first() {
+            return Ok(SymVal::Region(*primary));
+        }
         Ok(self.fresh_term(op.to_owned(), values.to_vec()))
     }
 

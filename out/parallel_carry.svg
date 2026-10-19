@@ -12,9 +12,9 @@
 <!-- 0 -->
 <g id="node1" class="node">
 <title>0</title>
-<ellipse fill="none" stroke="black" cx="98.29" cy="-26.87" rx="98.08" ry="26.74"/>
-<text text-anchor="start" x="36.79" y="-30.67" font-family="Times,serif" font-size="14.00">host:</text>
-<text text-anchor="middle" x="98.29" y="-15.67" font-family="Times,serif" font-size="14.00">R:[x, acc] W:[out]</text>
+<ellipse fill="none" stroke="black" cx="98.29" cy="-26.87" rx="86.03" ry="26.74"/>
+<text text-anchor="start" x="45.29" y="-30.67" font-family="Times,serif" font-size="14.00">host:</text>
+<text text-anchor="middle" x="98.29" y="-15.67" font-family="Times,serif" font-size="14.00">R:[acc] W:[out]</text>
 </g>
 <!-- 1 -->
 <g id="node2" class="node">
@@ -47,8 +47,8 @@
 <!-- 2&#45;&gt;0 -->
 <g id="edge3" class="edge">
 <title>2&#45;&gt;0</title>
-<path fill="none" stroke="black" d="M225.79,-106.78C201.88,-91.99 170.99,-72.87 145.6,-57.15"/>
-<polygon fill="black" stroke="black" points="147.21,-54.03 136.87,-51.75 143.53,-59.99 147.21,-54.03"/>
+<path fill="none" stroke="black" d="M225.79,-106.78C201.63,-91.83 170.32,-72.45 144.78,-56.65"/>
+<polygon fill="black" stroke="black" points="146.35,-53.5 136.01,-51.22 142.67,-59.45 146.35,-53.5"/>
 <text text-anchor="middle" x="223.29" y="-75.54" font-family="Times,serif" font-size="14.00">raw [acc]</text>
 </g>
 </g>
