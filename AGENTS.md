@@ -22,6 +22,26 @@ printer forms, effect-tracking gaps) follow the same rule at the *parser*
 level: smallest input that reproduces, committed as a fixture or unit
 test, red before the grammar/interpreter change.
 
+## Branch and PR workflow (enforced on GitHub)
+
+`main` is protected: direct pushes are rejected for everyone, admins
+included, and force-pushes/deletions are off. Every change lands through
+a pull request. There is no review requirement — a PR is merged
+immediately once it has no conflicts, using **rebase merge** so history
+stays linear.
+
+The local shape of a change:
+
+```sh
+git checkout -b <branch>
+# ... commits ...
+git push <remote> <branch>
+# open the PR (gh pr create --base main --head <branch>, or the REST API),
+# then rebase-merge it as soon as it is conflict-free (gh pr merge
+# --rebase, or PUT /repos/Servyi-Agent/pypto-symir/pulls/<n>/merge with
+# {"merge_method": "rebase"}).
+```
+
 ## Lint policy
 
 [Servyi lints](https://github.com/servyi/lints) run in CI (see
