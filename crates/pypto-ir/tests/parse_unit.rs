@@ -8,9 +8,8 @@
 
 //! Unit tests for parsing and symbolic folding.
 
-use symir::ast::{BinOp, Expr};
-use symir::parse::parse_program;
-use symir::sym::SymVal;
+use pypto_ir::ast::Expr;
+use pypto_ir::parse::parse_program;
 
 const MINIMAL: &str = "\
 import pypto.language as pl
@@ -36,19 +35,6 @@ fn parses_class_function_and_assign() {
 }
 
 #[test]
-fn folds_concrete_arithmetic() {
-    let l = SymVal::Int(2);
-    let r = SymVal::Int(3);
-    // Reuse the interpreter's folder through a tiny local mirror of the
-    // arithmetic the interpreter performs on BinOp.
-    let folded = match (BinOp::Add, &l, &r) {
-        (BinOp::Add, SymVal::Int(a), SymVal::Int(b)) => Some(SymVal::Int(a + b)),
-        _ => None,
-    };
-    assert_eq!(folded, Some(SymVal::Int(5)));
-}
-
-#[test]
 fn rejects_statement_outside_class() {
     let bad = "y = 1\n";
     assert!(parse_program(bad).is_err());
@@ -65,7 +51,7 @@ class S:
         return v
 ";
     let prog = parse_program(src).unwrap();
-    let symir::ast::Stmt::Assign { value, .. } = &prog.functions[0].body[0] else {
+    let pypto_ir::ast::Stmt::Assign { value, .. } = &prog.functions[0].body[0] else {
         panic!("expected assignment");
     };
     assert!(matches!(value, Expr::Subscript { .. }));

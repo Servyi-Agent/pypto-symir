@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/symir"]
+members = ["crates/pypto-ir", "crates/symir"]
 
 # NOTE: deliberately no [workspace.lints] table and no per-crate [lints]
 # tables — the Servyi lint policy is the explicit flag list the CI runs

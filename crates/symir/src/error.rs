@@ -1,5 +1,6 @@
 //! Error type for parsing and interpretation failures.
 
+use pypto_ir::IrError;
 use thiserror::Error;
 
 /// Everything that can go wrong in [`crate::parse_program`] or
@@ -26,4 +27,13 @@ pub enum SymirError {
         /// What failed.
         message: String,
     },
+}
+
+impl From<IrError> for SymirError {
+    fn from(e: IrError) -> Self {
+        match e {
+            IrError::Parse(m) => SymirError::Parse(m),
+            IrError::Unsupported { line, message } => SymirError::Unsupported { line, message },
+        }
+    }
 }

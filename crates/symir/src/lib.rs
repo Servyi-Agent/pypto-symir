@@ -17,7 +17,6 @@
 // `non_test_panic_allow`).
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::panic))]
 
-pub mod ast;
 pub mod consts;
 pub mod dag;
 pub mod emit;
@@ -25,9 +24,11 @@ pub mod error;
 pub mod graph;
 pub mod interp;
 pub mod msgs;
-pub mod parse;
 pub mod sym;
 
+// The IR frontend lives in the `pypto-ir` crate; re-exported so this
+// crate's historical paths (`symir::ast`, `symir::parse`) keep resolving.
+pub use pypto_ir::{ast, parse};
 pub use dag::TaskDag;
 pub use error::SymirError;
 

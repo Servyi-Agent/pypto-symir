@@ -18,7 +18,7 @@ use pest_derive::Parser as DeriveParser;
 
 use crate::ast::{BinOp, Expr, Function, IndexItem, Param, Program, Stmt, UnaryOp};
 use crate::consts;
-use crate::error::SymirError;
+use crate::error::IrError;
 
 /// How far one step through the flat line list moves.
 use consts::LINE_ADVANCE;
@@ -62,9 +62,9 @@ enum LineKind {
 }
 
 /// Parses a whole printed program.
-pub fn parse_program(src: &str) -> Result<Program, SymirError> {
+pub fn parse_program(src: &str) -> Result<Program, IrError> {
     let parsed =
-        PyptoParser::parse(Rule::source_file, src).map_err(|e| SymirError::Parse(e.to_string()))?;
+        PyptoParser::parse(Rule::source_file, src).map_err(|e| IrError::Parse(e.to_string()))?;
     let mut lines = Vec::new();
     for top in parsed {
         collect_lines(top, &mut lines)?;
@@ -73,7 +73,7 @@ pub fn parse_program(src: &str) -> Result<Program, SymirError> {
 }
 
 /// Flattens the pest tree into [`RawLine`]s.
-fn collect_lines(pair: Pair<'_, Rule>, out: &mut Vec<RawLine>) -> Result<(), SymirError> {
+fn collect_lines(pair: Pair<'_, Rule>, out: &mut Vec<RawLine>) -> Result<(), IrError> {
     if pair.as_rule() == Rule::content_line {
         let line_no = pair.as_span().start_pos().line_col().0;
         let mut kids = pair.into_inner();
@@ -84,7 +84,7 @@ fn collect_lines(pair: Pair<'_, Rule>, out: &mut Vec<RawLine>) -> Result<(), Sym
                 let _ = kids.next();
             }
         }
-        let body = kids.next().ok_or_else(|| SymirError::Unsupported {
+        let body = kids.next().ok_or_else(|| IrError::Unsupported {
             line: line_no,
             message: crate::msgs::MSG_EMPTY_CONTENT_LINE.to_owned(),
         })?;
@@ -103,7 +103,7 @@ fn collect_lines(pair: Pair<'_, Rule>, out: &mut Vec<RawLine>) -> Result<(), Sym
 }
 
 /// Turns one line-content pair into a [`LineKind`].
-fn classify(body: Pair<'_, Rule>, line_no: usize) -> Result<LineKind, SymirError> {
+fn classify(body: Pair<'_, Rule>, line_no: usize) -> Result<LineKind, IrError> {
     match body.as_rule() {
         Rule::comment_line | Rule::import_line => Ok(LineKind::Comment),
         Rule::decorator_line => Ok(LineKind::Decorator(decorator_of(body)?)),
@@ -144,7 +144,7 @@ fn classify(body: Pair<'_, Rule>, line_no: usize) -> Result<LineKind, SymirError
                     _ => {}
                 }
             }
-            let iterator = iterator.ok_or_else(|| SymirError::Unsupported {
+            let iterator = iterator.ok_or_else(|| IrError::Unsupported {
                 line: line_no,
                 message: crate::msgs::MSG_FOR_WITHOUT_ITERATOR.to_owned(),
             })?;
@@ -168,7 +168,7 @@ fn classify(body: Pair<'_, Rule>, line_no: usize) -> Result<LineKind, SymirError
                     binder = Some(child.as_str().to_owned());
                 }
             }
-            let scope = scope.ok_or_else(|| SymirError::Unsupported {
+            let scope = scope.ok_or_else(|| IrError::Unsupported {
                 line: line_no,
                 message: crate::msgs::MSG_WITH_WITHOUT_SCOPE.to_owned(),
             })?;
@@ -190,7 +190,7 @@ fn classify(body: Pair<'_, Rule>, line_no: usize) -> Result<LineKind, SymirError
         }
         Rule::pass_stmt => Ok(LineKind::Pass),
         Rule::statement => Ok(LineKind::Simple(stmt_of(body, line_no)?)),
-        other => Err(SymirError::Unsupported {
+        other => Err(IrError::Unsupported {
             line: line_no,
             message: format!("line kind {other:?}"),
         }),
@@ -215,11 +215,11 @@ fn collect_for_target(
 }
 
 /// Builds the decorator expression: `@dotted.name(args...)`.
-fn decorator_of(body: Pair<'_, Rule>) -> Result<Expr, SymirError> {
+fn decorator_of(body: Pair<'_, Rule>) -> Result<Expr, IrError> {
     let mut kids: VecDeque<Pair<'_, Rule>> = body.into_inner().collect();
     let name = kids
         .pop_front()
-        .ok_or_else(|| SymirError::Parse(crate::msgs::MSG_DECORATOR_WITHOUT_NAME.to_owned()))?;
+        .ok_or_else(|| IrError::Parse(crate::msgs::MSG_DECORATOR_WITHOUT_NAME.to_owned()))?;
     let mut expr = build_expr(name)?;
     if let Some(call) = kids.pop_front() {
         expr = apply_trailer(expr, call)?;
@@ -228,23 +228,23 @@ fn decorator_of(body: Pair<'_, Rule>) -> Result<Expr, SymirError> {
 }
 
 /// Unwraps a `call_args` pair into its `call_args_inner` payload.
-fn call_args_of(pair: Pair<'_, Rule>) -> Result<Pair<'_, Rule>, SymirError> {
+fn call_args_of(pair: Pair<'_, Rule>) -> Result<Pair<'_, Rule>, IrError> {
     for child in pair.into_inner() {
         if child.as_rule() == Rule::call_args_inner {
             return Ok(child);
         }
     }
-    Err(SymirError::Parse(
+    Err(IrError::Parse(
         crate::msgs::MSG_CALL_ARGS_WITHOUT_PAYLOAD.to_owned(),
     ))
 }
 
 /// Converts a `statement` pair into an ast [`Stmt`].
-fn stmt_of(body: Pair<'_, Rule>, line_no: usize) -> Result<Stmt, SymirError> {
+fn stmt_of(body: Pair<'_, Rule>, line_no: usize) -> Result<Stmt, IrError> {
     let child = body
         .into_inner()
         .next()
-        .ok_or_else(|| SymirError::Unsupported {
+        .ok_or_else(|| IrError::Unsupported {
             line: line_no,
             message: crate::msgs::MSG_EMPTY_STATEMENT.to_owned(),
         })?;
@@ -279,7 +279,7 @@ fn stmt_of(body: Pair<'_, Rule>, line_no: usize) -> Result<Stmt, SymirError> {
                 value,
             })
         }
-        other => Err(SymirError::Unsupported {
+        other => Err(IrError::Unsupported {
             line: line_no,
             message: format!("statement kind {other:?}"),
         }),
@@ -291,7 +291,7 @@ fn stmt_of(body: Pair<'_, Rule>, line_no: usize) -> Result<Stmt, SymirError> {
 // ---------------------------------------------------------------------------
 
 /// Builds the [`Program`] out of the flat line list.
-fn build_program(lines: &[RawLine]) -> Result<Program, SymirError> {
+fn build_program(lines: &[RawLine]) -> Result<Program, IrError> {
     let mut pos = usize::default();
     let mut decorators = Vec::new();
     let mut program_name = None;
@@ -308,7 +308,7 @@ fn build_program(lines: &[RawLine]) -> Result<Program, SymirError> {
             LineKind::DefHeader { name, params, .. } => {
                 let header_pos = pos;
                 let body_indent = body_indent_after(lines, header_pos).ok_or_else(|| {
-                    SymirError::Unsupported {
+                    IrError::Unsupported {
                         line: current.line,
                         message: format!("function {name} without a body"),
                     }
@@ -331,7 +331,7 @@ fn build_program(lines: &[RawLine]) -> Result<Program, SymirError> {
             }
             _ => {
                 if program_name.is_none() {
-                    return Err(SymirError::Unsupported {
+                    return Err(IrError::Unsupported {
                         line: current.line,
                         message: crate::msgs::MSG_STMT_OUTSIDE_CLASS.to_owned(),
                     });
@@ -340,7 +340,7 @@ fn build_program(lines: &[RawLine]) -> Result<Program, SymirError> {
         }
         pos += LINE_ADVANCE;
     }
-    let name = program_name.ok_or_else(|| SymirError::Unsupported {
+    let name = program_name.ok_or_else(|| IrError::Unsupported {
         line: 0,
         message: crate::msgs::MSG_NO_PROGRAM_CLASS.to_owned(),
     })?;
@@ -369,7 +369,7 @@ fn body_indent_after(lines: &[RawLine], header_pos: usize) -> Option<usize> {
 }
 
 /// Parses statements at `indent` until dedent; `pos` is advanced.
-fn parse_block(lines: &[RawLine], pos: &mut usize, indent: usize) -> Result<Vec<Stmt>, SymirError> {
+fn parse_block(lines: &[RawLine], pos: &mut usize, indent: usize) -> Result<Vec<Stmt>, IrError> {
     let mut stmts = Vec::new();
     while let Some(current) = lines.get(*pos) {
         if matches!(current.kind, LineKind::Comment) {
@@ -380,7 +380,7 @@ fn parse_block(lines: &[RawLine], pos: &mut usize, indent: usize) -> Result<Vec<
             break;
         }
         if current.indent > indent {
-            return Err(SymirError::Unsupported {
+            return Err(IrError::Unsupported {
                 line: current.line,
                 message: crate::msgs::MSG_INCONSISTENT_INDENT.to_owned(),
             });
@@ -424,7 +424,7 @@ fn parse_block(lines: &[RawLine], pos: &mut usize, indent: usize) -> Result<Vec<
                 stmts.push(Stmt::While { cond, body });
             }
             LineKind::Elif(_) | LineKind::ElseHeader => {
-                return Err(SymirError::Unsupported {
+                return Err(IrError::Unsupported {
                     line: current.line,
                     message: crate::msgs::MSG_ELIF_WITHOUT_IF.to_owned(),
                 });
@@ -468,7 +468,7 @@ fn parse_block(lines: &[RawLine], pos: &mut usize, indent: usize) -> Result<Vec<
                 *pos += LINE_ADVANCE;
             }
             LineKind::Decorator(_) | LineKind::ClassHeader { .. } | LineKind::DefHeader { .. } => {
-                return Err(SymirError::Unsupported {
+                return Err(IrError::Unsupported {
                     line: current.line,
                     message: crate::msgs::MSG_NESTED_DEFINITION.to_owned(),
                 });
@@ -484,9 +484,9 @@ fn block_after(
     pos: &mut usize,
     header_pos: usize,
     header_line: usize,
-) -> Result<Vec<Stmt>, SymirError> {
+) -> Result<Vec<Stmt>, IrError> {
     let body_indent =
-        body_indent_after(lines, header_pos).ok_or_else(|| SymirError::Unsupported {
+        body_indent_after(lines, header_pos).ok_or_else(|| IrError::Unsupported {
             line: header_line,
             message: crate::msgs::MSG_HEADER_WITHOUT_BODY.to_owned(),
         })?;
@@ -499,7 +499,7 @@ fn arm_after(
     lines: &[RawLine],
     pos: &mut usize,
     header_pos: usize,
-) -> Result<Vec<Stmt>, SymirError> {
+) -> Result<Vec<Stmt>, IrError> {
     let header_line = lines.get(header_pos).map(|l| l.line).unwrap_or_default();
     block_after(lines, pos, header_pos, header_line)
 }
@@ -509,26 +509,26 @@ fn arm_after(
 // ---------------------------------------------------------------------------
 
 /// Extracts the single `expr` child (required).
-fn only_expr(pair: Pair<'_, Rule>, line_no: usize) -> Result<Expr, SymirError> {
+fn only_expr(pair: Pair<'_, Rule>, line_no: usize) -> Result<Expr, IrError> {
     for child in pair.into_inner() {
         if child.as_rule() == Rule::expr {
             return build_expr(child);
         }
     }
-    Err(SymirError::Unsupported {
+    Err(IrError::Unsupported {
         line: line_no,
         message: crate::msgs::MSG_EXPECTED_EXPRESSION.to_owned(),
     })
 }
 
 /// Reads the sole identifier child of a header pair.
-fn single_ident_child(pair: Pair<'_, Rule>, line_no: usize) -> Result<String, SymirError> {
+fn single_ident_child(pair: Pair<'_, Rule>, line_no: usize) -> Result<String, IrError> {
     for child in pair.into_inner() {
         if child.as_rule() == Rule::ident {
             return Ok(child.as_str().to_owned());
         }
     }
-    Err(SymirError::Unsupported {
+    Err(IrError::Unsupported {
         line: line_no,
         message: crate::msgs::MSG_EXPECTED_IDENTIFIER.to_owned(),
     })
@@ -539,21 +539,21 @@ fn next_rule(
     kids: &mut VecDeque<Pair<'_, Rule>>,
     rule: Rule,
     line_no: usize,
-) -> Result<String, SymirError> {
+) -> Result<String, IrError> {
     while let Some(front) = kids.pop_front() {
         if front.as_rule() == rule {
             return Ok(front.as_str().to_owned());
         }
     }
-    Err(SymirError::Unsupported {
+    Err(IrError::Unsupported {
         line: line_no,
         message: crate::msgs::MSG_EXPECTED_DEF_NAME.to_owned(),
     })
 }
 
 /// Pops one expression pair off the queue (required).
-fn pop_expr(queue: &mut VecDeque<Pair<'_, Rule>>, line_no: usize) -> Result<Expr, SymirError> {
-    let front = queue.pop_front().ok_or_else(|| SymirError::Unsupported {
+fn pop_expr(queue: &mut VecDeque<Pair<'_, Rule>>, line_no: usize) -> Result<Expr, IrError> {
+    let front = queue.pop_front().ok_or_else(|| IrError::Unsupported {
         line: line_no,
         message: crate::msgs::MSG_ASSIGN_WITHOUT_VALUE.to_owned(),
     })?;
@@ -561,7 +561,7 @@ fn pop_expr(queue: &mut VecDeque<Pair<'_, Rule>>, line_no: usize) -> Result<Expr
 }
 
 /// Converts one `annotated_param` pair (ident + annotation).
-fn param_of(pair: Pair<'_, Rule>, line_no: usize) -> Result<Param, SymirError> {
+fn param_of(pair: Pair<'_, Rule>, line_no: usize) -> Result<Param, IrError> {
     let mut name = None;
     let mut annotation = None;
     for child in pair.into_inner() {
@@ -571,7 +571,7 @@ fn param_of(pair: Pair<'_, Rule>, line_no: usize) -> Result<Param, SymirError> {
             annotation = Some(build_expr(child)?);
         }
     }
-    let name = name.ok_or_else(|| SymirError::Unsupported {
+    let name = name.ok_or_else(|| IrError::Unsupported {
         line: line_no,
         message: crate::msgs::MSG_PARAM_WITHOUT_NAME.to_owned(),
     })?;
@@ -582,13 +582,13 @@ fn param_of(pair: Pair<'_, Rule>, line_no: usize) -> Result<Param, SymirError> {
 }
 
 /// Recursive pest-pair → ast-Expr conversion.
-fn build_expr(pair: Pair<'_, Rule>) -> Result<Expr, SymirError> {
+fn build_expr(pair: Pair<'_, Rule>) -> Result<Expr, IrError> {
     match pair.as_rule() {
         Rule::expr => {
             let inner = pair
                 .into_inner()
                 .next()
-                .ok_or_else(|| SymirError::Parse(crate::msgs::MSG_EMPTY_EXPRESSION.to_owned()))?;
+                .ok_or_else(|| IrError::Parse(crate::msgs::MSG_EMPTY_EXPRESSION.to_owned()))?;
             build_expr(inner)
         }
         Rule::or_expr => chain_expr(pair, Rule::and_expr, BinOp::Or),
@@ -598,29 +598,29 @@ fn build_expr(pair: Pair<'_, Rule>) -> Result<Expr, SymirError> {
             if let Some(first) = kids.pop_front() {
                 if first.as_rule() == Rule::KW_NOT {
                     let inner = kids.pop_front().ok_or_else(|| {
-                        SymirError::Parse(crate::msgs::MSG_NOT_WITHOUT_OPERAND.to_owned())
+                        IrError::Parse(crate::msgs::MSG_NOT_WITHOUT_OPERAND.to_owned())
                     })?;
                     return Ok(Expr::UnaryOp(UnaryOp::Not, Box::new(build_expr(inner)?)));
                 }
                 return build_expr(first);
             }
-            Err(SymirError::Parse(
+            Err(IrError::Parse(
                 crate::msgs::MSG_EMPTY_NOT_EXPR.to_owned(),
             ))
         }
         Rule::comparison => {
             let mut kids: VecDeque<Pair<'_, Rule>> = pair.into_inner().collect();
             let lhs = build_expr(kids.pop_front().ok_or_else(|| {
-                SymirError::Parse(crate::msgs::MSG_COMPARISON_WITHOUT_LHS.to_owned())
+                IrError::Parse(crate::msgs::MSG_COMPARISON_WITHOUT_LHS.to_owned())
             })?)?;
             if kids.is_empty() {
                 return Ok(lhs);
             }
             let op_pair = kids.pop_front().ok_or_else(|| {
-                SymirError::Parse(crate::msgs::MSG_COMPARISON_WITHOUT_OP.to_owned())
+                IrError::Parse(crate::msgs::MSG_COMPARISON_WITHOUT_OP.to_owned())
             })?;
             let rhs_pair = kids.pop_front().ok_or_else(|| {
-                SymirError::Parse(crate::msgs::MSG_COMPARISON_WITHOUT_RHS.to_owned())
+                IrError::Parse(crate::msgs::MSG_COMPARISON_WITHOUT_RHS.to_owned())
             })?;
             let op = binop_of_token(&op_pair)?;
             Ok(Expr::BinOp(
@@ -648,25 +648,25 @@ fn build_expr(pair: Pair<'_, Rule>) -> Result<Expr, SymirError> {
             }
             operands
                 .pop()
-                .ok_or_else(|| SymirError::Parse(crate::msgs::MSG_EMPTY_CHAIN.to_owned()))
+                .ok_or_else(|| IrError::Parse(crate::msgs::MSG_EMPTY_CHAIN.to_owned()))
         }
         Rule::unary => {
             let mut kids: VecDeque<Pair<'_, Rule>> = pair.into_inner().collect();
             if let Some(first) = kids.pop_front() {
                 if first.as_rule() == Rule::unary_op {
                     let inner = kids.pop_front().ok_or_else(|| {
-                        SymirError::Parse(crate::msgs::MSG_UNARY_WITHOUT_OPERAND.to_owned())
+                        IrError::Parse(crate::msgs::MSG_UNARY_WITHOUT_OPERAND.to_owned())
                     })?;
                     return Ok(Expr::UnaryOp(UnaryOp::Neg, Box::new(build_expr(inner)?)));
                 }
                 return build_expr(first);
             }
-            Err(SymirError::Parse(crate::msgs::MSG_EMPTY_UNARY.to_owned()))
+            Err(IrError::Parse(crate::msgs::MSG_EMPTY_UNARY.to_owned()))
         }
         Rule::postfix => {
             let mut kids: VecDeque<Pair<'_, Rule>> = pair.into_inner().collect();
             let primary = kids.pop_front().ok_or_else(|| {
-                SymirError::Parse(crate::msgs::MSG_POSTFIX_WITHOUT_PRIMARY.to_owned())
+                IrError::Parse(crate::msgs::MSG_POSTFIX_WITHOUT_PRIMARY.to_owned())
             })?;
             let mut expr = build_expr(primary)?;
             while let Some(trailer) = kids.pop_front() {
@@ -678,14 +678,14 @@ fn build_expr(pair: Pair<'_, Rule>) -> Result<Expr, SymirError> {
             let value = pair
                 .as_str()
                 .parse::<i64>()
-                .map_err(|e| SymirError::Parse(format!("{e}")))?;
+                .map_err(|e| IrError::Parse(format!("{e}")))?;
             Ok(Expr::Int(value))
         }
         Rule::float_lit => {
             let value = pair
                 .as_str()
                 .parse::<f64>()
-                .map_err(|e| SymirError::Parse(format!("{e}")))?;
+                .map_err(|e| IrError::Parse(format!("{e}")))?;
             Ok(Expr::Float(value))
         }
         Rule::string_lit => {
@@ -702,7 +702,7 @@ fn build_expr(pair: Pair<'_, Rule>) -> Result<Expr, SymirError> {
                 }
             }
             Ok(Expr::Str(inner.ok_or_else(|| {
-                SymirError::Parse(crate::msgs::MSG_EMPTY_STRING.to_owned())
+                IrError::Parse(crate::msgs::MSG_EMPTY_STRING.to_owned())
             })?))
         }
         Rule::bool_lit => Ok(Expr::Bool(pair.as_str() == consts::BUILTIN_TRUE)),
@@ -712,10 +712,10 @@ fn build_expr(pair: Pair<'_, Rule>) -> Result<Expr, SymirError> {
                 if child.as_rule() == Rule::dict_entry {
                     let mut pair_kids = child.into_inner();
                     let key = pair_kids.next().ok_or_else(|| {
-                        SymirError::Parse(crate::msgs::MSG_DICT_ENTRY_WITHOUT_KEY.to_owned())
+                        IrError::Parse(crate::msgs::MSG_DICT_ENTRY_WITHOUT_KEY.to_owned())
                     })?;
                     let value = pair_kids.next().ok_or_else(|| {
-                        SymirError::Parse(crate::msgs::MSG_DICT_ENTRY_WITHOUT_VALUE.to_owned())
+                        IrError::Parse(crate::msgs::MSG_DICT_ENTRY_WITHOUT_VALUE.to_owned())
                     })?;
                     // `dict_key` wraps a string/int/bool literal.
                     let key_expr = if key.as_rule() == Rule::dict_key {
@@ -724,7 +724,7 @@ fn build_expr(pair: Pair<'_, Rule>) -> Result<Expr, SymirError> {
                         Some(key)
                     };
                     let key_expr = key_expr.ok_or_else(|| {
-                        SymirError::Parse(crate::msgs::MSG_DICT_KEY_WITHOUT_CONTENT.to_owned())
+                        IrError::Parse(crate::msgs::MSG_DICT_KEY_WITHOUT_CONTENT.to_owned())
                     })?;
                     entries.push((build_expr(key_expr)?, build_expr(value)?));
                 }
@@ -753,7 +753,7 @@ fn build_expr(pair: Pair<'_, Rule>) -> Result<Expr, SymirError> {
             let inner = pair
                 .into_inner()
                 .next()
-                .ok_or_else(|| SymirError::Parse(crate::msgs::MSG_EMPTY_GROUP.to_owned()))?;
+                .ok_or_else(|| IrError::Parse(crate::msgs::MSG_EMPTY_GROUP.to_owned()))?;
             build_expr(inner)
         }
         Rule::unit_lit => Ok(Expr::Tuple(Vec::new())),
@@ -761,19 +761,19 @@ fn build_expr(pair: Pair<'_, Rule>) -> Result<Expr, SymirError> {
             let inner = pair
                 .into_inner()
                 .next()
-                .ok_or_else(|| SymirError::Parse(crate::msgs::MSG_EMPTY_NAME.to_owned()))?;
+                .ok_or_else(|| IrError::Parse(crate::msgs::MSG_EMPTY_NAME.to_owned()))?;
             build_expr(inner)
         }
         Rule::dotted_name => dotted_name_of(pair),
         Rule::ident => Ok(Expr::Name(pair.as_str().to_owned())),
-        other => Err(SymirError::Parse(format!(
+        other => Err(IrError::Parse(format!(
             "unexpected expression rule {other:?}"
         ))),
     }
 }
 
 /// Builds a left-associated boolean chain (`a and b and c`).
-fn chain_expr(pair: Pair<'_, Rule>, operand_rule: Rule, op: BinOp) -> Result<Expr, SymirError> {
+fn chain_expr(pair: Pair<'_, Rule>, operand_rule: Rule, op: BinOp) -> Result<Expr, IrError> {
     let mut operands = Vec::new();
     for child in pair.into_inner() {
         if child.as_rule() == operand_rule {
@@ -781,7 +781,7 @@ fn chain_expr(pair: Pair<'_, Rule>, operand_rule: Rule, op: BinOp) -> Result<Exp
         }
     }
     if operands.is_empty() {
-        return Err(SymirError::Parse(
+        return Err(IrError::Parse(
             crate::msgs::MSG_BOOL_CHAIN_WITHOUT_OPERANDS.to_owned(),
         ));
     }
@@ -793,11 +793,11 @@ fn chain_expr(pair: Pair<'_, Rule>, operand_rule: Rule, op: BinOp) -> Result<Exp
 }
 
 /// Builds the attribute chain out of a `dotted_name` pair.
-fn dotted_name_of(pair: Pair<'_, Rule>) -> Result<Expr, SymirError> {
+fn dotted_name_of(pair: Pair<'_, Rule>) -> Result<Expr, IrError> {
     let mut parts: VecDeque<String> = pair.into_inner().map(|p| p.as_str().to_owned()).collect();
     let head = parts
         .pop_front()
-        .ok_or_else(|| SymirError::Parse(crate::msgs::MSG_EMPTY_DOTTED_NAME.to_owned()))?;
+        .ok_or_else(|| IrError::Parse(crate::msgs::MSG_EMPTY_DOTTED_NAME.to_owned()))?;
     let mut expr = Expr::Name(head);
     while let Some(part) = parts.pop_front() {
         expr = Expr::Attr(Box::new(expr), part);
@@ -806,7 +806,7 @@ fn dotted_name_of(pair: Pair<'_, Rule>) -> Result<Expr, SymirError> {
 }
 
 /// Applies one postfix trailer (call, subscript, attribute) to `expr`.
-fn apply_trailer(base: Expr, trailer: Pair<'_, Rule>) -> Result<Expr, SymirError> {
+fn apply_trailer(base: Expr, trailer: Pair<'_, Rule>) -> Result<Expr, IrError> {
     match trailer.as_rule() {
         Rule::call_args => {
             let inner = call_args_of(trailer)?;
@@ -821,7 +821,7 @@ fn apply_trailer(base: Expr, trailer: Pair<'_, Rule>) -> Result<Expr, SymirError
                     Rule::slice_all => indices.push(IndexItem::SliceAll),
                     Rule::index_expr => {
                         let Some(inner) = child.into_inner().next() else {
-                            return Err(SymirError::Parse(
+                            return Err(IrError::Parse(
                                 crate::msgs::MSG_EMPTY_EXPRESSION.to_owned(),
                             ));
                         };
@@ -836,12 +836,12 @@ fn apply_trailer(base: Expr, trailer: Pair<'_, Rule>) -> Result<Expr, SymirError
             })
         }
         Rule::ident => Ok(Expr::Attr(Box::new(base), trailer.as_str().to_owned())),
-        other => Err(SymirError::Parse(format!("unexpected trailer {other:?}"))),
+        other => Err(IrError::Parse(format!("unexpected trailer {other:?}"))),
     }
 }
 
 /// Builds `base(args..., kwargs...)` out of a `call_args_inner` pair.
-fn call_args_inner_of(base: Expr, inner: Pair<'_, Rule>) -> Result<Expr, SymirError> {
+fn call_args_inner_of(base: Expr, inner: Pair<'_, Rule>) -> Result<Expr, IrError> {
     let mut args = Vec::new();
     let mut kwargs = Vec::new();
     // `call_arg` is silent: `kwarg` and `expr` pairs attach directly.
@@ -850,9 +850,9 @@ fn call_args_inner_of(base: Expr, inner: Pair<'_, Rule>) -> Result<Expr, SymirEr
             let mut kv = arg.into_inner();
             let key = kv
                 .next()
-                .ok_or_else(|| SymirError::Parse(crate::msgs::MSG_KWARG_WITHOUT_KEY.to_owned()))?;
+                .ok_or_else(|| IrError::Parse(crate::msgs::MSG_KWARG_WITHOUT_KEY.to_owned()))?;
             let value = kv.next().ok_or_else(|| {
-                SymirError::Parse(crate::msgs::MSG_KWARG_WITHOUT_VALUE.to_owned())
+                IrError::Parse(crate::msgs::MSG_KWARG_WITHOUT_VALUE.to_owned())
             })?;
             kwargs.push((key.as_str().to_owned(), build_expr(value)?));
         } else {
@@ -867,7 +867,7 @@ fn call_args_inner_of(base: Expr, inner: Pair<'_, Rule>) -> Result<Expr, SymirEr
 }
 
 /// Maps an operator token pair to its [`BinOp`].
-fn binop_of_token(pair: &Pair<'_, Rule>) -> Result<BinOp, SymirError> {
+fn binop_of_token(pair: &Pair<'_, Rule>) -> Result<BinOp, IrError> {
     let text = pair.as_str();
     if text == consts::TOK_PLUS {
         return Ok(BinOp::Add);
@@ -905,7 +905,7 @@ fn binop_of_token(pair: &Pair<'_, Rule>) -> Result<BinOp, SymirError> {
     if text == consts::TOK_GE {
         return Ok(BinOp::Ge);
     }
-    Err(SymirError::Parse(
+    Err(IrError::Parse(
         crate::msgs::MSG_UNKNOWN_OPERATOR.to_owned(),
     ))
 }

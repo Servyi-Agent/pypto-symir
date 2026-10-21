@@ -1,0 +1,12 @@
+[package]
+name = "pypto-ir"
+description = "Frontend for the printed PyPTO IR: PEG grammar, parser and AST types shared by all PyPTO IR tooling"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+pest = "2.7"
+pest_derive = { version = "2.7", features = ["std"] }
+thiserror = "2.0"

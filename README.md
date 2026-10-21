@@ -123,6 +123,16 @@ Compliance notes:
   source of truth.
 * No `unsafe`, no `unwrap`/`panic` outside the sanctioned test exemptions.
 
+## Workspace layout
+
+* `crates/pypto-ir` — the printed-IR frontend: PEG grammar
+  (`src/pypto_ir.pest`), parser, AST types, and the IR-surface constants
+  (module/op names, iterators, scopes, kwargs, arg directions). Every
+  tool that reads printed PyPTO programs depends on this crate.
+* `crates/symir` — the symbolic interpreter and task-DAG extractor over
+  that frontend (the `symir` CLI). Re-exports `symir::ast` and
+  `symir::parse` for compatibility.
+
 ## License
 
 MIT OR Apache-2.0.
