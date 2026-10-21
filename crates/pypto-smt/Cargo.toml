@@ -1,0 +1,15 @@
+[package]
+name = "pypto-smt"
+description = "Bounded symbolic SMT analysis over the printed PyPTO IR (z3): SPMD intra-task race reasoning"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+pypto-ir = { path = "../pypto-ir" }
+z3 = "0.12"
+
+[[bin]]
+name = "pypto-smt"
+path = "src/main.rs"
