@@ -6,11 +6,13 @@ use std::fs;
 use std::process::ExitCode;
 
 use pypto_smt::consts;
+use pypto_smt::mlw;
+use pypto_smt::walk;
 use pypto_smt::{find_spmd, stride_partition_is_disjoint};
 
 fn main() -> ExitCode {
     let args: Vec<String> = env::args().collect();
-    if args.len() != consts::EXPECTED_ARG_COUNT {
+    if args.len() < consts::EXPECTED_ARG_COUNT {
         eprintln!("{}", consts::MSG_USAGE);
         return ExitCode::FAILURE;
     }
@@ -32,6 +34,9 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
+    if let Some(mode) = flag_value(&args, consts::FLAG_SPMD) {
+        return spmd_mode(&program, &mode);
+    }
     for site in find_spmd(&program) {
         let disjoint = stride_partition_is_disjoint(site.width, site.width);
         println!(
@@ -49,4 +54,34 @@ fn main() -> ExitCode {
         );
     }
     ExitCode::SUCCESS
+}
+
+/// `--flag value` extractor.
+fn flag_value(args: &[String], flag: &str) -> Option<String> {
+    args.iter()
+        .position(|a| a == flag)
+        .and_then(|pos| args.get(pos + consts::PATH_ARG_INDEX))
+        .cloned()
+}
+
+/// `--spmd <index|mlw>`: walk a body and act on it.
+fn spmd_mode(program: &pypto_ir::ast::Program, mode: &str) -> ExitCode {
+    if mode == consts::MODE_MLW {
+        match walk::walk_spmd(program, consts::FIRST_SITE) {
+            Ok(body) => {
+                println!(
+                    "{}",
+                    mlw::emit_mlw(&body, consts::MSG_PROVENANCE)
+                );
+                ExitCode::SUCCESS
+            }
+            Err(e) => {
+                eprintln!("{}: {}: {}", consts::MSG_REFUSED, e.construct, e.detail);
+                ExitCode::FAILURE
+            }
+        }
+    } else {
+        eprintln!("{}", consts::MSG_USAGE);
+        ExitCode::FAILURE
+    }
 }
