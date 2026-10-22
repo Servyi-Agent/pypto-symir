@@ -133,6 +133,16 @@ Compliance notes:
   that frontend (the `symir` CLI). Re-exports `symir::ast` and
   `symir::parse` for compatibility.
 
+* `crates/pypto-smt` — bounded symbolic SMT analysis over that frontend
+  (the `pypto-smt` CLI). SPMD bodies are walked into an access log
+  (region windows with exact instance-variable bounds and path
+  conditions) and emitted as a WhyML model (`--spmd mlw`): the
+  stride-partition lemma plus Q1/Q2 (cross-tile read-write /
+  write-write overlap) and Q3 (output coverage) goals, discharged by
+  why3/Z3. Un-modellable constructs (`while`, carries, dynamic
+  dispatch) are refused by name — never approximated. Synchronization
+  is ignored by scoping decision (accepted false positives).
+
 ## License
 
 MIT OR Apache-2.0.

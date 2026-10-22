@@ -13,6 +13,9 @@
 //! [z3]: https://crates.io/crates/z3
 
 pub mod consts;
+pub mod mlw;
+pub mod term;
+pub mod walk;
 
 use pypto_ir::ast::{Expr, Program, Stmt};
 use z3::ast::{self, Ast};
