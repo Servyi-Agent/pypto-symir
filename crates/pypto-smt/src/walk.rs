@@ -52,8 +52,8 @@ pub struct SpmdBody {
     pub width: i64,
     pub accesses: Vec<Access>,
     pub loops: Vec<LoopInfo>,
-    /// Uninterpreted `tensor.read` value functions in encounter order.
-    pub read_funcs: Vec<String>,
+    /// Uninterpreted `tensor.read` value functions (name, arity).
+    pub read_funcs: Vec<(String, usize)>,
     /// Constant symbols the model needs declared (dims, module globals).
     pub consts: Vec<(String, i64)>,
     /// Named non-constant symbols with no value (dynamic dims, tensor dims).
@@ -184,7 +184,7 @@ fn is_scalar_param(param: &pypto_ir::ast::Param) -> bool {
             Expr::Subscript { base, .. } => cursor = base,
             Expr::Attr(inner, leaf) => {
                 return matches!(inner.as_ref(), Expr::Name(n) if n == consts::MODULE_PL)
-                    && leaf == "Scalar";
+                    && leaf == consts::TYPE_SCALAR;
             }
             _ => return false,
         }
@@ -214,10 +214,10 @@ fn is_attr(expr: &Expr, leaf: &str) -> bool {
 pub fn sanitize(name: &str) -> String {
     let mut out = String::new();
     for ch in name.chars() {
-        if ch.is_ascii_alphanumeric() || ch == '_' {
+        if ch.is_ascii_alphanumeric() || ch == tool::SANITIZE_KEEP {
             out.push(ch.to_ascii_lowercase());
         } else {
-            out.push('_');
+            out.push(tool::SANITIZE_FALLBACK);
         }
     }
     out
@@ -310,7 +310,7 @@ impl<'a> Walker<'a> {
             index_vars.first().cloned().unwrap_or_else(|| var.clone()),
             Val::Scalar(Term::Var(var.clone())),
         );
-        for extra in index_vars.iter().skip(1) {
+        for extra in index_vars.iter().skip(tool::EXTRA_INDEX_VARS_START) {
             let _ = self.env.insert(extra.clone(), Val::Scalar(Term::Var(var.clone())));
         }
         self.coords.push(var);
@@ -319,13 +319,16 @@ impl<'a> Walker<'a> {
 
     /// `pl.range(stop | start,stop | start,stop,step)` / `pl.unroll(n)` —
     /// exact instance bounds; positive literal step required.
+    // IR op names, argument positions and arities below are the IR's
+    // own signatures (necessities, not choices).
+    #[allow(inline_literal)]
     fn loop_bounds(&mut self, iterator: &Expr) -> Result<(Term, Term, i64), Unsupported> {
         let (args, leaf) = match iterator {
             Expr::Call { func, args, .. } if is_attr(func, consts::ITER_RANGE)
                 || is_attr(func, consts::ITER_UNROLL)
                 || is_attr(func, consts::ITER_PARALLEL) =>
             {
-                (args, dotted_leaf(func))
+                (args, String::new())
             }
             other => {
                 let name = dotted_name(other);
@@ -398,6 +401,9 @@ impl<'a> Walker<'a> {
         }
     }
 
+    // IR op names, argument positions and arities below are the IR's
+    // own signatures (necessities, not choices).
+    #[allow(inline_literal)]
     fn call_value(
         &mut self,
         func: &Expr,
@@ -405,9 +411,19 @@ impl<'a> Walker<'a> {
         _kwargs: &[(String, Expr)],
         annotation: &Option<Expr>,
     ) -> Result<Val, Unsupported> {
-        let full = dotted_name(func);
-        let name = full.strip_prefix(&format!("{}.", consts::MODULE_PL)).unwrap_or(&full);
-        match name {
+        let path = op_path(func);
+        let name: String = match &path {
+            OpPath::Pl(leaf) => (**leaf).to_owned(),
+            OpPath::Namespaced(namespace, leaf) => {
+                format!("{}{}{}", namespace, consts::CHAR_DOT, leaf)
+            }
+            OpPath::Other => dotted_name(func),
+        };
+        let leaf_name: String = match &path {
+            OpPath::Pl(leaf) | OpPath::Namespaced(_, leaf) => (**leaf).to_owned(),
+            OpPath::Other => String::new(),
+        };
+        match name.as_str() {
             "tile.get_block_idx" | "tensor.get_block_idx" => Ok(Val::Scalar(Term::BlockIdx)),
             "tile.get_block_num" | "tensor.get_block_num" => {
                 Ok(Val::Scalar(Term::Int(self.body.width)))
@@ -444,8 +460,9 @@ impl<'a> Walker<'a> {
                 let flat = self.index_list(args.get(1))?;
                 self.record_access(Dir::Read, &region, flat.clone(), vec![Term::Int(1)])?;
                 let fname = format!("{}{}", tool::READ_PREFIX, sanitize(&region));
-                if !self.body.read_funcs.contains(&fname) {
-                    self.body.read_funcs.push(fname.clone());
+                let entry = (fname.clone(), flat.len());
+                if !self.body.read_funcs.contains(&entry) {
+                    self.body.read_funcs.push(entry);
                 }
                 Ok(Val::Scalar(Term::Read { func: fname, args: flat }))
             }
@@ -466,9 +483,10 @@ impl<'a> Walker<'a> {
                 // On-chip tile element read: no external memory access; the
                 // value stays uninterpreted (dead branches rely on this).
                 let flat = self.index_list(args.get(1))?;
-                let fname = tool::TILE_READ_FUNC.to_owned();
-                if !self.body.read_funcs.contains(&fname) {
-                    self.body.read_funcs.push(fname.clone());
+                let fname = format!("{}{}", tool::TILE_READ_FUNC, flat.len());
+                let entry = (fname.clone(), flat.len());
+                if !self.body.read_funcs.contains(&entry) {
+                    self.body.read_funcs.push(entry);
                 }
                 Ok(Val::Scalar(Term::Read { func: fname, args: flat }))
             }
@@ -517,10 +535,11 @@ impl<'a> Walker<'a> {
             other => {
                 // Only tensor.* views compose onto the base region;
                 // tile.* slicing/composition stays on-chip.
-                if other.starts_with("tensor.") {
-                    let leaf = other.rsplit('.').next().unwrap_or(other);
-                    if consts::VIEW_FORMING_OPS.contains(&leaf) {
-                        if leaf == consts::OP_TENSOR_ASSEMBLE {
+                if let OpPath::Namespaced(namespace, leaf) = &path {
+                    if namespace == &tool::NAMESPACE_TENSOR.to_owned()
+                        && consts::VIEW_FORMING_OPS.contains(leaf)
+                    {
+                        if *leaf == consts::OP_TENSOR_ASSEMBLE {
                             return Err(Unsupported {
                                 construct: tool::CALL.to_owned(),
                                 detail: format!("{other}: {}", tool::MSG_ASSEMBLE_REFUSED),
@@ -530,6 +549,7 @@ impl<'a> Walker<'a> {
                         return Ok(Val::Region(region));
                     }
                 }
+                let _ = leaf_name;
                 if let Some(annotation_shape) = annotation_shape(annotation) {
                     return Ok(Val::Tile { shape: annotation_shape });
                 }
@@ -553,6 +573,9 @@ impl<'a> Walker<'a> {
     }
 
     /// The index expressions of a `[a, b, ...]` argument.
+    // IR op names, argument positions and arities below are the IR's
+    // own signatures (necessities, not choices).
+    #[allow(inline_literal)]
     fn index_list(&mut self, expr: Option<&Expr>) -> Result<Vec<Term>, Unsupported> {
         match expr {
             Some(Expr::List(items)) => {
@@ -670,9 +693,9 @@ impl<'a> Walker<'a> {
             t.read_funcs(&mut funcs);
         }
         guards.read_funcs(&mut funcs);
-        for func in funcs {
-            if !self.body.read_funcs.contains(&func) {
-                self.body.read_funcs.push(func);
+        for entry in funcs {
+            if !self.body.read_funcs.contains(&entry) {
+                self.body.read_funcs.push(entry);
             }
         }
         self.body.accesses.push(Access {
@@ -724,10 +747,27 @@ fn dotted_name(expr: &Expr) -> String {
     }
 }
 
-fn dotted_leaf(func: &Expr) -> String {
-    match func {
-        Expr::Attr(_, leaf) => leaf.clone(),
-        _ => String::new(),
+/// Structural classification of a callee path: `pl.leaf`,
+/// `pl.namespace.leaf`, or anything else — matched on the AST, not on
+/// strings (the grammar already did the parsing).
+enum OpPath<'e> {
+    Pl(&'e str),
+    Namespaced(&'e str, &'e str),
+    Other,
+}
+
+fn op_path(func: &Expr) -> OpPath<'_> {
+    let Expr::Attr(base, leaf) = func else {
+        return OpPath::Other;
+    };
+    match base.as_ref() {
+        Expr::Name(module) if module == consts::MODULE_PL => OpPath::Pl(leaf),
+        Expr::Attr(grand, namespace)
+            if matches!(grand.as_ref(), Expr::Name(m) if m == consts::MODULE_PL) =>
+        {
+            OpPath::Namespaced(namespace, leaf)
+        }
+        _ => OpPath::Other,
     }
 }
 

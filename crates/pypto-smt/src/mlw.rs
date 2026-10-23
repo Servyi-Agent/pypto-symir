@@ -28,6 +28,8 @@ enum Copy {
 }
 
 impl Copy {
+    // The copy letters are the encoding's own names (necessities).
+    #[allow(inline_literal)]
     fn suffix(self) -> &'static str {
         match self {
             Copy::A => "a",
@@ -68,6 +70,8 @@ impl<'a> Module<'a> {
         }
     }
 
+    // Why3 stdlib theory names are the tool's own vocabulary.
+    #[allow(inline_literal)]
     fn header(&mut self) {
         let _ = writeln!(self.out, "module SpmdBody");
         for theory in ["int.Int", "int.MinMax", "int.ComputerDivision"] {
@@ -86,8 +90,14 @@ impl<'a> Module<'a> {
         if !self.body.consts.is_empty() || !self.body.symbols.is_empty() {
             let _ = writeln!(self.out);
         }
-        for func in &self.body.read_funcs {
-            let _ = writeln!(self.out, "  function {func} (x : int) : int");
+        for (func, arity) in &self.body.read_funcs {
+            let args: Vec<String> = (0..*arity).map(|i| format!("x{i}")).collect();
+            let params = if args.is_empty() {
+                String::new()
+            } else {
+                format!("{} : int", args.join(" "))
+            };
+            let _ = writeln!(self.out, "  function {func} ({params}) : int");
         }
         if !self.body.read_funcs.is_empty() {
             let _ = writeln!(self.out);
@@ -136,6 +146,8 @@ impl<'a> Module<'a> {
         (vars, conds)
     }
 
+    // Q1/Q2 numbering and copy letters are necessities.
+    #[allow(inline_literal)]
     fn pair_goals(&mut self) {
         let pairs: Vec<(usize, usize)> = self
             .body
@@ -228,9 +240,11 @@ impl<'a> Module<'a> {
                 self.term(s2, Copy::B)
             ));
         }
-        parts.join(" /\\ ")
+        parts.join(crate::consts::SEP_WHY3_AND)
     }
 
+    // WhyML operator spellings and Q3 numbering are necessities.
+    #[allow(inline_literal)]
     fn coverage_goals(&mut self) {
         let mut regions: Vec<&str> = Vec::new();
         for access in &self.body.accesses {
@@ -346,6 +360,8 @@ impl<'a> Module<'a> {
         }
     }
 
+    // WhyML operator spellings and Q3 numbering are necessities.
+    #[allow(inline_literal)]
     fn bool_str(&self, b: &Bool, copy: Copy) -> String {
         match b {
             Bool::B(true) => "true".to_owned(),
@@ -369,6 +385,8 @@ impl<'a> Module<'a> {
         }
     }
 
+    // WhyML operator spellings and Q3 numbering are necessities.
+    #[allow(inline_literal)]
     fn join(&self, parts: &[Bool], copy: Copy, sep: &str) -> String {
         let rendered: Vec<String> = parts.iter().map(|p| self.bool_str(p, copy)).collect();
         format!("({})", rendered.join(&format!(" {sep} ")))

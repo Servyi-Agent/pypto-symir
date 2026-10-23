@@ -100,6 +100,22 @@ fn emitted_model_has_lemma_and_goals() {
     assert!(mlw.contains("function read_lengths"), "metadata plane declared");
 }
 
+/// All three spmd sites of the real indexer walk clean and emit goals.
+#[test]
+fn all_indexer_spmd_sites_walk() {
+    let src = std::fs::read_to_string(INDEXER).unwrap();
+    let program = parse_program(&src).unwrap();
+    for site in 0..3 {
+        let body = walk_spmd(&program, site).unwrap();
+        assert!(
+            body.accesses.iter().any(|a| a.dir == Dir::Write),
+            "site {site} stores something"
+        );
+        let mlw = pypto_smt::mlw::emit_mlw(&body, "indexer");
+        assert!(mlw.contains("goal waw_"), "site {site} has a Q2 goal");
+    }
+}
+
 /// End to end through why3 itself: Q2 must come back Valid on the real
 /// kernel. Ignored by default — CI has no why3; run locally with
 /// `cargo test -p pypto-smt -- --ignored`.
@@ -115,7 +131,7 @@ fn why3_proves_output_waw_disjoint() {
     let out = std::process::Command::new("why3")
         .arg("prove")
         .arg("-P")
-        .arg("Z3,4.16.0,noBV")
+        .arg("Z3,4.16.0")
         .arg("-t")
         .arg("60")
         .arg(&file)

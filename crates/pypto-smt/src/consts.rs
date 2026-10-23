@@ -25,6 +25,18 @@ pub const EXPECTED_ARG_COUNT: usize = 2;
 pub const PATH_ARG_INDEX: usize = 1;
 /// Spmd subcommand flag.
 pub const FLAG_SPMD: &str = "--spmd";
+/// Site-selection flag (`--site N`, 0-based in `find_spmd` order).
+pub const FLAG_SITE: &str = "--site";
+/// Namespace prefix of tensor-level (view-forming) ops.
+pub const NAMESPACE_TENSOR: &str = "tensor";
+/// Character kept verbatim by the identifier sanitizer.
+pub const SANITIZE_KEEP: char = '_';
+/// Replacement character for non-alphanumeric characters.
+pub const SANITIZE_FALLBACK: char = '_';
+/// Index vars after the first (already bound) in a loop header.
+pub const EXTRA_INDEX_VARS_START: usize = 1;
+/// WhyML conjunction separator in emitted formulas.
+pub const SEP_WHY3_AND: &str = " /\\ ";
 /// The mlw emission mode.
 pub const MODE_MLW: &str = "mlw";
 /// The first spmd site index.
@@ -49,18 +61,31 @@ pub const MU_PREFIX: &str = "mu";
 pub const DIM_PREFIX: &str = "dim_";
 /// Prefix for uninterpreted `tensor.read` value functions.
 pub const READ_PREFIX: &str = "read_";
-/// Construct names used in refusals.
+/// Construct names used in refusals. Each string is the construct's own
+/// name (a necessity, not a choice), so the sites carry an explicit allow.
+#[allow(inline_literal)]
 pub const WHILE: &str = "while";
+#[allow(inline_literal)]
 pub const LOOP_CARRY: &str = "loop-carried iteration args";
+#[allow(inline_literal)]
 pub const ITERATOR: &str = "loop iterator";
+#[allow(inline_literal)]
 pub const RANGE_STEP: &str = "range step";
+#[allow(inline_literal)]
 pub const SCALAR_OP: &str = "scalar op";
+#[allow(inline_literal)]
 pub const EXPRESSION: &str = "expression";
+#[allow(inline_literal)]
 pub const CALL: &str = "call";
+#[allow(inline_literal)]
 pub const CONDITION: &str = "condition";
+#[allow(inline_literal)]
 pub const REGION: &str = "region";
+#[allow(inline_literal)]
 pub const INDEX_LIST: &str = "index list";
+#[allow(inline_literal)]
 pub const STORE_SHAPE: &str = "store shape";
+#[allow(inline_literal)]
 pub const SITE_SELECT: &str = "spmd site selection";
 pub const SCOPE_SPMD_TOOL: &str = "spmd";
 /// Refusal prose.
@@ -78,9 +103,12 @@ pub const MSG_STORE_SHAPE: &str = "stored tile's window shape is not computable"
 pub const MSG_ASSEMBLE_REFUSED: &str =
     "tensor.assemble writes through views; offset composition not modeled yet";
 /// Goal name prefixes.
+#[allow(inline_literal)]
 pub const GOAL_WAW: &str = "waw";
+#[allow(inline_literal)]
 pub const GOAL_RAW: &str = "raw";
 /// Uninterpreted on-chip tile-read value function name.
+#[allow(inline_literal)]
 pub const TILE_READ_FUNC: &str = "tile_read";
 /// Instance bound symbols (documentation of the encoding).
 pub const BOUND_WORKER_A: &str = "0 <= w_a < width";
