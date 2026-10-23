@@ -53,6 +53,9 @@ pub const MODE_MLW: &str = "mlw";
 pub const FIRST_SITE: usize = 0;
 /// Provenance line for emitted models.
 pub const MSG_PROVENANCE: &str = "source: printed PyPTO IR (pre-pass), first spmd site";
+/// Verdict-line markers parsed by the why3 end-to-end tests.
+pub const GOAL_MARKER: &str = "Goal waw_out_n1.";
+pub const VERDICT_MARKER: &str = "Prover result";
 /// Refusal header.
 pub const MSG_REFUSED: &str = "refused";
 /// Updated usage line covering the spmd modes.

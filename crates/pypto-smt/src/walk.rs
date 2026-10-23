@@ -178,7 +178,16 @@ fn collect_stmts<'f>(function: &'f Function, stmts: &[Stmt], out: &mut Sites<'f>
                     collect_stmts(function, arm, out);
                 }
             }
-            Stmt::For { body, .. } | Stmt::While { body, .. } => {
+            // The loop form: `for w in pl.spmd(n):` — one site per loop.
+            Stmt::For { iterator, body, .. } => {
+                if let Some((args, _)) = as_pl_call(iterator, consts::SCOPE_SPMD) {
+                    if let Some(Expr::Int(width)) = args.first() {
+                        out.push((function, *width));
+                    }
+                }
+                collect_stmts(function, body, out);
+            }
+            Stmt::While { body, .. } => {
                 collect_stmts(function, body, out);
             }
             _ => {}
@@ -315,6 +324,16 @@ impl<'a> Walker<'a> {
         iter_args: &[String],
         iterator: &Expr,
     ) -> Result<(), Unsupported> {
+        // `for w in pl.spmd(n):` — the loop IS the worker axis; the index
+        // variable denotes the block index.
+        if as_pl_call(iterator, consts::SCOPE_SPMD).is_some() {
+            for var in index_vars {
+                let _ = self
+                    .env
+                    .insert(var.clone(), Val::Scalar(Term::BlockIdx));
+            }
+            return Ok(());
+        }
         let (lo, hi, step) = self.loop_bounds(iterator)?;
         let var = format!("{}{}", tool::MU_PREFIX, self.loop_seq);
         self.loop_seq += 1;
