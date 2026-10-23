@@ -131,7 +131,10 @@ impl<'a> Module<'a> {
     }
 
     /// Quantifier variables and instance constraints for one copy of one
-    /// access: the worker plus one `k` per enclosing loop.
+    /// access: the worker, one `k` per enclosing loop, and one free
+    /// (havoced) variable per carried value in the writer's context —
+    /// data-race detection havocs the whole context, so carries carry no
+    /// constraints.
     fn instance(&self, access: &Access, copy: Copy) -> (Vec<String>, Vec<String>) {
         let mut vars = vec![format!("w_{}", copy.suffix())];
         let mut conds = vec![format!("0 <= w_{} < {}", copy.suffix(), self.body.width)];
@@ -141,7 +144,11 @@ impl<'a> Module<'a> {
             conds.push(format!("{k} >= 0"));
             let lo = self.term(&l.lo, copy);
             let hi = self.term(&l.hi, copy);
-            conds.push(format!("({lo} + {} * {k}) < {hi}", l.step));
+            let step = self.term(&l.step, copy);
+            conds.push(format!("({lo} + {step} * {k}) < {hi}"));
+        }
+        for hv in &access.havoc {
+            vars.push(format!("{hv}_{}", copy.suffix()));
         }
         (vars, conds)
     }
@@ -195,8 +202,21 @@ impl<'a> Module<'a> {
             }
             let (vars_a, conds_a) = self.instance(a, Copy::A);
             let (vars_b, conds_b) = self.instance(b, Copy::B);
-            let all_vars = [vars_a, vars_b].concat();
-            let all_conds = [conds_a, conds_b].concat();
+            let all_conds = [conds_a.clone(), conds_b.clone()].concat();
+            // Drop quantifiers the goal body never mentions (why3 leaves
+            // unused quantified variables polymorphic).
+            let body_text = format!(
+                "{} w_a <> w_b {} {} {}",
+                all_conds.join(" "),
+                self.bool_str(&a.guards, Copy::A),
+                self.bool_str(&b.guards, Copy::B),
+                self.overlap_str(a, b)
+            );
+            let all_vars: Vec<String> = [vars_a, vars_b]
+                .concat()
+                .into_iter()
+                .filter(|v| body_text.contains(v.as_str()) || all_conds.iter().any(|c| c.contains(v.as_str())))
+                .collect();
             let _ = writeln!(
                 self.out,
                 "  (* Q{}: {} on {} (log entries {} and {}) *)",
@@ -246,6 +266,14 @@ impl<'a> Module<'a> {
     // WhyML operator spellings and Q3 numbering are necessities.
     #[allow(inline_literal)]
     fn coverage_goals(&mut self) {
+        if !self.body.havocs.is_empty() {
+            let _ = writeln!(
+                self.out,
+                "  (* Q3: SKIPPED — body carries state; havoced contexts cannot prove coverage *)"
+            );
+            let _ = writeln!(self.out);
+            return;
+        }
         let mut regions: Vec<&str> = Vec::new();
         for access in &self.body.accesses {
             if access.dir == Dir::Write && !regions.contains(&access.region.as_str()) {
@@ -334,9 +362,13 @@ impl<'a> Module<'a> {
                 Some((idx, l)) => format!(
                     "({} + {} * k{idx}_{})",
                     self.term(&l.lo, copy),
-                    l.step,
+                    self.term(&l.step, copy),
                     copy.suffix()
                 ),
+                // Havoced writer-context symbols are quantified per copy.
+                None if self.body.havocs.contains(name) => {
+                    format!("{}_{}", sanitize(name), copy.suffix())
+                }
                 None => sanitize(name),
             },
             Term::Bin(op, a, b) => {
