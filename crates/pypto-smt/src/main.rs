@@ -35,7 +35,10 @@ fn main() -> ExitCode {
         }
     };
     if let Some(mode) = flag_value(&args, consts::FLAG_SPMD) {
-        return spmd_mode(&program, &mode);
+        let site = flag_value(&args, consts::FLAG_SITE)
+            .and_then(|s| s.parse::<usize>().ok())
+            .unwrap_or(consts::FIRST_SITE);
+        return spmd_mode(&program, &mode, site);
     }
     for site in find_spmd(&program) {
         let disjoint = stride_partition_is_disjoint(site.width, site.width);
@@ -65,9 +68,9 @@ fn flag_value(args: &[String], flag: &str) -> Option<String> {
 }
 
 /// `--spmd <index|mlw>`: walk a body and act on it.
-fn spmd_mode(program: &pypto_ir::ast::Program, mode: &str) -> ExitCode {
+fn spmd_mode(program: &pypto_ir::ast::Program, mode: &str, site: usize) -> ExitCode {
     if mode == consts::MODE_MLW {
-        match walk::walk_spmd(program, consts::FIRST_SITE) {
+        match walk::walk_spmd(program, site) {
             Ok(body) => {
                 println!(
                     "{}",

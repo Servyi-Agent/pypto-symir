@@ -60,6 +60,8 @@ pub enum CmpOp {
 }
 
 impl Term {
+    // Folding arithmetics on concrete ints: 0/1 are necessities.
+    #[allow(inline_literal)]
     /// Folds two concrete ints, else builds the node.
     pub fn bin(op: BinOp, a: Term, b: Term) -> Term {
         match (op, &a, &b) {
@@ -88,12 +90,13 @@ impl Term {
         }
     }
 
-    /// Every uninterpreted read function mentioned anywhere in the term.
-    pub fn read_funcs(&self, out: &mut Vec<String>) {
+    /// Every uninterpreted read function (name, arity) in the term.
+    pub fn read_funcs(&self, out: &mut Vec<(String, usize)>) {
         match self {
             Term::Read { func, args } => {
-                if !out.contains(func) {
-                    out.push(func.clone());
+                let entry = (func.clone(), args.len());
+                if !out.contains(&entry) {
+                    out.push(entry);
                 }
                 for a in args {
                     a.read_funcs(out);
@@ -126,8 +129,8 @@ impl Bool {
         }
     }
 
-    /// Every uninterpreted read function mentioned in the condition.
-    pub fn read_funcs(&self, out: &mut Vec<String>) {
+    /// Every uninterpreted read function (name, arity) in the condition.
+    pub fn read_funcs(&self, out: &mut Vec<(String, usize)>) {
         match self {
             Bool::Cmp(_, a, b) => {
                 a.read_funcs(out);
@@ -145,6 +148,8 @@ impl Bool {
 }
 
 impl fmt::Display for CmpOp {
+    // Operator spellings are the term language's own (necessities).
+    #[allow(inline_literal)]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let s = match self {
             CmpOp::Lt => "<",

@@ -29,10 +29,10 @@ module SpmdBody
   constant dim_index_cache_0 : int
   constant dim_query_0 : int
 
-  function read_request_ids (x : int) : int
-  function read_lengths (x : int) : int
-  function read_block_table (x : int) : int
-  function tile_read (x : int) : int
+  function read_request_ids (x0 : int) : int
+  function read_lengths (x0 : int) : int
+  function read_block_table (x0 x1 : int) : int
+  function tile_read2 (x0 x1 : int) : int
 
   lemma stride_partition : forall w1 w2 k1 k2. 0 <= w1 < 32 -> 0 <= w2 < 32 ->
     w1 <> w2 -> k1 >= 0 -> k2 >= 0 -> w1 + 32 * k1 <> w2 + 32 * k2
