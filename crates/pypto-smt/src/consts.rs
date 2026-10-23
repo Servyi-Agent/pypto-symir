@@ -29,6 +29,16 @@ pub const FLAG_SPMD: &str = "--spmd";
 pub const FLAG_SITE: &str = "--site";
 /// Namespace prefix of tensor-level (view-forming) ops.
 pub const NAMESPACE_TENSOR: &str = "tensor";
+/// The on-chip tile op namespace.
+pub const NAMESPACE_TILE: &str = "tile";
+/// Prefix for havoced writer-context (carried) symbols.
+pub const HAVOC_PREFIX: &str = "carry_";
+/// Hint name for bare yield_ rebinds.
+pub const HAVOC_YIELD: &str = "rebind";
+/// Prefix for fresh private regions from `tensor.create`.
+pub const FRESH_REGION_PREFIX: &str = "fresh_";
+/// The InCore function-type marker.
+pub const FN_TYPE_INCORE: &str = "InCore";
 /// Character kept verbatim by the identifier sanitizer.
 pub const SANITIZE_KEEP: char = '_';
 /// Replacement character for non-alphanumeric characters.
@@ -92,8 +102,6 @@ pub const SCOPE_SPMD_TOOL: &str = "spmd";
 pub const MSG_NO_SPMD_BODY: &str = "function has no spmd scope body";
 pub const MSG_WHILE_REFUSED: &str =
     "while-shaped control cannot be characterized exactly by instance variables; phantom iterations would fabricate accesses";
-pub const MSG_CARRY_REFUSED: &str =
-    "carried values thread per-iteration state; not an exact instance encoding";
 pub const MSG_ITERATOR_REFUSED: &str =
     "only pl.range / pl.unroll / pl.parallel iterators are modeled";
 pub const MSG_STEP_REFUSED: &str = "range step must be a positive integer literal";

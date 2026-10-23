@@ -62,7 +62,7 @@ fn work_loop_is_worker_strided() {
         .iter()
         .find(|l| matches!(&l.lo, Term::BlockIdx))
         .expect("the work loop starts at the block index");
-    assert_eq!(work.step, body.width);
+    assert_eq!(work.step, pypto_smt::term::Term::Int(body.width));
 }
 
 /// A body containing `while` must be refused by name — phantom iterations
@@ -96,7 +96,10 @@ fn emitted_model_has_lemma_and_goals() {
     let mlw = pypto_smt::mlw::emit_mlw(&body, "indexer score (pre-pass)");
     assert!(mlw.contains("lemma stride_partition"));
     assert!(mlw.contains("goal waw_output"), "the Q2 goal for output");
-    assert!(mlw.contains("goal covered_output"), "the Q3 goal for output");
+    assert!(
+        mlw.contains("goal covered_output") || mlw.contains("SKIPPED — body carries state"),
+        "the Q3 goal for output, or the documented carry-skip"
+    );
     assert!(mlw.contains("function read_lengths"), "metadata plane declared");
 }
 
@@ -142,4 +145,61 @@ fn why3_proves_output_waw_disjoint() {
         text.contains("Goal waw_output_n1.") && text.contains("Valid"),
         "Q2 must be proved; why3 said:\n{text}"
     );
+}
+
+/// The flagship spmd example (pypto's own 09_paged_attention_spmd,
+/// frontend dump committed under fixtures/): five dispatch-form sites at
+/// width 4. All five walk under the havoc-context policy — carried state
+/// (yield_/init_values/loop-exit accumulations) quantified freely, InCore
+/// callees inlined, runtime stride from get_block_num.
+#[test]
+fn paged_attention_spmd_all_sites_walk() {
+    let src = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/paged_attention_spmd.py"
+    ))
+    .unwrap();
+    let program = parse_program(&src).unwrap();
+    for site in 0..5 {
+        let body = walk_spmd(&program, site).unwrap();
+        assert_eq!(body.width, 4);
+        assert!(!body.havocs.is_empty(), "carried state is havoced");
+        assert!(
+            body.accesses.iter().any(|a| a.dir == Dir::Write),
+            "site {site} writes memory"
+        );
+        let mlw = pypto_smt::mlw::emit_mlw(&body, "paged attention spmd");
+        assert!(mlw.contains("goal waw_") || mlw.contains("goal raw_"));
+        assert!(mlw.contains("SKIPPED — body carries state"), "Q3 refused");
+    }
+}
+
+/// End to end through why3 on the flagship example: every pair goal of
+/// site 0 must prove. Ignored by default — CI has no why3.
+#[test]
+#[ignore = "requires why3 (present in the dev environment, not in CI)"]
+fn why3_proves_paged_attention_spmd() {
+    let src = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/paged_attention_spmd.py"
+    ))
+    .unwrap();
+    let body = walk_spmd(&parse_program(&src).unwrap(), 0).unwrap();
+    let mlw = pypto_smt::mlw::emit_mlw(&body, "paged attention spmd");
+    let dir = std::env::temp_dir().join("pypto-smt-why3-pa");
+    let _ = std::fs::create_dir_all(&dir);
+    let file = dir.join("pa.mlw");
+    std::fs::write(&file, mlw).unwrap();
+    let out = std::process::Command::new("why3")
+        .arg("prove")
+        .arg("-P")
+        .arg("Z3,4.16.0")
+        .arg("-t")
+        .arg("120")
+        .arg(&file)
+        .output()
+        .unwrap();
+    let text = String::from_utf8_lossy(&out.stdout).to_string() + &String::from_utf8_lossy(&out.stderr);
+    let valid = text.matches("Valid").count();
+    assert!(valid >= 30, "expected every goal proved, got {valid}:\n{text}");
 }

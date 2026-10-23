@@ -138,10 +138,14 @@ Compliance notes:
   (region windows with exact instance-variable bounds and path
   conditions) and emitted as a WhyML model (`--spmd mlw`): the
   stride-partition lemma plus Q1/Q2 (cross-tile read-write /
-  write-write overlap) and Q3 (output coverage) goals, discharged by
-  why3/Z3. Un-modellable constructs (`while`, carries, dynamic
-  dispatch) are refused by name — never approximated. Synchronization
-  is ignored by scoping decision (accepted false positives).
+  write-write overlap) goals, discharged by why3/Z3. Data-race
+  detection havocs the writer's context: carried values
+  (`yield_`/`init_values`/loop-exit accumulations) and runtime strides
+  are free per-copy symbols; `InCore` dispatch bodies are inlined.
+  Un-modellable constructs (`while`, `tensor.assemble` composition,
+  unknown calls) are refused by name — never approximated. Q3 (output
+  coverage) is emitted only for carry-free bodies. Synchronization is
+  ignored by scoping decision (accepted false positives).
 
 ## License
 

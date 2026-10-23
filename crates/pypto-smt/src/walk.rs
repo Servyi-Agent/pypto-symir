@@ -34,16 +34,20 @@ pub struct Access {
     pub guards: Bool,
     /// Instance variables in scope (worker first).
     pub coords: Vec<String>,
+    /// Havoced writer-context symbols in scope (carried values).
+    pub havoc: Vec<String>,
 }
 
 /// One loop of the body, as an exact instance characterization.
 #[derive(Debug, Clone)]
 pub struct LoopInfo {
     pub var: String,
-    /// `[lo, hi)` with `mu = lo + step * k`, `k >= 0`.
+    /// `[lo, hi)` with `mu = lo + step * k`, `k >= 0`; the step may be a
+    /// term (a runtime stride is part of the havoced writer context, and
+    /// the encoded instances stay a superset of the real ones).
     pub lo: Term,
     pub hi: Term,
-    pub step: i64,
+    pub step: Term,
 }
 
 /// The walk result for one spmd body.
@@ -58,6 +62,8 @@ pub struct SpmdBody {
     pub consts: Vec<(String, i64)>,
     /// Named non-constant symbols with no value (dynamic dims, tensor dims).
     pub symbols: Vec<String>,
+    /// Carried-value symbols (havoced in every writer context).
+    pub havocs: Vec<String>,
 }
 
 /// Why the walk refused a body.
@@ -73,6 +79,7 @@ enum Val {
     Scalar(Term),
     Tile { shape: Vec<Term> },
     Region(String),
+    Tuple(Vec<Val>),
     None,
 }
 
@@ -82,7 +89,9 @@ struct Walker<'a> {
     env: HashMap<String, Val>,
     guards: Vec<Bool>,
     coords: Vec<String>,
+    havoc: Vec<String>,
     loop_seq: usize,
+    fresh_seq: usize,
 }
 
 /// Walks the `n`-th spmd site of the program (0-based, in `find_spmd` order).
@@ -104,7 +113,9 @@ pub fn walk_spmd(program: &Program, site: usize) -> Result<SpmdBody, Unsupported
         env: HashMap::new(),
         guards: Vec::new(),
         coords: vec![tool::SYM_WORKER.to_owned()],
+        havoc: Vec::new(),
         loop_seq: 0,
+        fresh_seq: 0,
     };
     for (name, value) in &program.globals {
         match value {
@@ -262,9 +273,22 @@ impl<'a> Walker<'a> {
                 Ok(())
             }
             Stmt::For { index_vars, iter_arg_vars, iterator, body } => {
+                let havoc_before = self.havoc.len();
                 self.enter_loop(index_vars, iter_arg_vars, iterator)?;
                 self.stmts(body)?;
                 let _ = self.coords.pop();
+                self.havoc.truncate(havoc_before);
+                // Sequential-accumulation exit values still reference this
+                // loop's mu; their exact value depends on the whole
+                // execution, so they join the havoced writer context (and
+                // stay in scope — an over-approximation, like every havoc).
+                if let Some(last) = self.body.loops.last().cloned() {
+                    let mu = last.var;
+                    let rebinding = self.rebind_mu_mentions(&mu);
+                    for sym in rebinding {
+                        self.havoc.push(sym);
+                    }
+                }
                 Ok(())
             }
             Stmt::While { .. } => Err(Unsupported {
@@ -291,12 +315,6 @@ impl<'a> Walker<'a> {
         iter_args: &[String],
         iterator: &Expr,
     ) -> Result<(), Unsupported> {
-        if !iter_args.is_empty() {
-            return Err(Unsupported {
-                construct: tool::LOOP_CARRY.to_owned(),
-                detail: tool::MSG_CARRY_REFUSED.to_owned(),
-            });
-        }
         let (lo, hi, step) = self.loop_bounds(iterator)?;
         let var = format!("{}{}", tool::MU_PREFIX, self.loop_seq);
         self.loop_seq += 1;
@@ -313,8 +331,59 @@ impl<'a> Walker<'a> {
         for extra in index_vars.iter().skip(tool::EXTRA_INDEX_VARS_START) {
             let _ = self.env.insert(extra.clone(), Val::Scalar(Term::Var(var.clone())));
         }
+        // Data-race detection havocs the writer's context: carried values
+        // enter scope as free symbols (sound superset for Q1/Q2; Q3 is
+        // skipped for carried bodies).
+        for carried in iter_args {
+            let sym = self.fresh_havoc(carried);
+            let _ = self.env.insert(carried.clone(), Val::Scalar(Term::Var(sym)));
+        }
         self.coords.push(var);
         Ok(())
+    }
+
+    /// Rebinds every scalar whose term mentions `mu` to a fresh havoced
+    /// symbol (loop-exit values join the writer context).
+    fn rebind_mu_mentions(&mut self, mu: &str) -> Vec<String> {
+        let mut rebinds: Vec<(String, String)> = Vec::new();
+        for (name, val) in self.env.iter() {
+            if let Val::Scalar(t) = val {
+                if term_mentions(t, mu) {
+                    rebinds.push((name.clone(), String::new()));
+                }
+            }
+        }
+        let mut symbols = Vec::new();
+        for (name, _) in &rebinds {
+            let sym = self.next_havoc(name);
+            symbols.push(sym);
+        }
+        for ((name, _), sym) in rebinds.into_iter().zip(symbols.iter().cloned()) {
+            let _ = self.env.insert(name, Val::Scalar(Term::Var(sym)));
+        }
+        symbols
+    }
+
+    /// Registers a fresh havoc symbol without pushing a scope (used for
+    /// loop-exit rebinds living in the enclosing scope).
+    fn next_havoc(&mut self, hint: &str) -> String {
+        let sym = format!("{}{}_{}", tool::HAVOC_PREFIX, sanitize(hint), self.fresh_seq);
+        self.fresh_seq += 1;
+        if !self.body.havocs.contains(&sym) {
+            self.body.havocs.push(sym.clone());
+        }
+        sym
+    }
+
+    /// A fresh havoced writer-context symbol, registered body-wide.
+    fn fresh_havoc(&mut self, hint: &str) -> String {
+        let sym = format!("{}{}_{}", tool::HAVOC_PREFIX, sanitize(hint), self.fresh_seq);
+        self.fresh_seq += 1;
+        if !self.body.havocs.contains(&sym) {
+            self.body.havocs.push(sym.clone());
+        }
+        self.havoc.push(sym.clone());
+        sym
     }
 
     /// `pl.range(stop | start,stop | start,stop,step)` / `pl.unroll(n)` —
@@ -322,7 +391,7 @@ impl<'a> Walker<'a> {
     // IR op names, argument positions and arities below are the IR's
     // own signatures (necessities, not choices).
     #[allow(inline_literal)]
-    fn loop_bounds(&mut self, iterator: &Expr) -> Result<(Term, Term, i64), Unsupported> {
+    fn loop_bounds(&mut self, iterator: &Expr) -> Result<(Term, Term, Term), Unsupported> {
         let (args, leaf) = match iterator {
             Expr::Call { func, args, .. } if is_attr(func, consts::ITER_RANGE)
                 || is_attr(func, consts::ITER_UNROLL)
@@ -340,20 +409,9 @@ impl<'a> Walker<'a> {
         };
         let _ = leaf;
         match args.len() {
-            1 => Ok((Term::Int(0), self.term(&args[0])?, 1)),
-            2 => Ok((self.term(&args[0])?, self.term(&args[1])?, 1)),
-            3 => {
-                let step = match &args[2] {
-                    Expr::Int(n) if *n > 0 => *n,
-                    _ => {
-                        return Err(Unsupported {
-                            construct: tool::RANGE_STEP.to_owned(),
-                            detail: tool::MSG_STEP_REFUSED.to_owned(),
-                        })
-                    }
-                };
-                Ok((self.term(&args[0])?, self.term(&args[1])?, step))
-            }
+            1 => Ok((Term::Int(0), self.term(&args[0])?, Term::Int(1))),
+            2 => Ok((self.term(&args[0])?, self.term(&args[1])?, Term::Int(1))),
+            3 => Ok((self.term(&args[0])?, self.term(&args[1])?, self.term(&args[2])?)),
             _ => Err(Unsupported {
                 construct: tool::ITERATOR.to_owned(),
                 detail: tool::MSG_ITERATOR_REFUSED.to_owned(),
@@ -366,12 +424,27 @@ impl<'a> Walker<'a> {
     fn value_of(&mut self, expr: &Expr, annotation: &Option<Expr>) -> Result<Val, Unsupported> {
         match expr {
             Expr::Int(n) => Ok(Val::Scalar(Term::Int(*n))),
-            Expr::Name(name) => Ok(self
-                .env
-                .get(name)
-                .cloned()
-                .unwrap_or(Val::None)),
+            Expr::Name(name) => Ok(self.env.get(name).cloned().unwrap_or(Val::None)),
             Expr::Attr(base, _) => Ok(self.value_of(base, annotation)?),
+            Expr::Subscript { base, indices } => {
+                // Tuple element selection on multi-return calls.
+                let val = self.value_of(base, annotation)?;
+                if let [pypto_ir::ast::IndexItem::Expr(item)] = indices.as_slice() {
+                    if let (Val::Tuple(items), Expr::Int(idx)) = (&val, item.as_ref()) {
+                        if let Some(found) = items.get(*idx as usize) {
+                            return Ok(found.clone());
+                        }
+                    }
+                }
+                Ok(val)
+            }
+            Expr::Tuple(items) => {
+                let mut vals = Vec::new();
+                for item in items {
+                    vals.push(self.value_of(item, &None)?);
+                }
+                Ok(Val::Tuple(vals))
+            }
             Expr::Call { func, args, kwargs } => self.call_value(func, args, kwargs, annotation),
             Expr::BinOp(op, a, b) => {
                 let (x, y) = (self.term(a)?, self.term(b)?);
@@ -510,7 +583,24 @@ impl<'a> Walker<'a> {
                 let region = self.region_of(&args[2])?;
                 let offs = self.index_list(args.get(1))?;
                 self.record_access(Dir::Write, &region, offs, shapes)?;
-                Ok(Val::None)
+                // The store's result denotes the updated destination.
+                Ok(Val::Region(region))
+            }
+            "yield_" => {
+                // The carried value flows to the next iteration; its
+                // rebinding is a fresh havoced context symbol. Arguments
+                // are still evaluated for their memory effects.
+                for arg in args {
+                    let _ = self.value_of(arg, &None)?;
+                }
+                Ok(Val::Scalar(Term::Var(self.fresh_havoc(tool::HAVOC_YIELD))))
+            }
+            "tensor.create" | "create" => {
+                // A fresh private region (scratch/carried buffer).
+                let name = format!("{}{}", tool::FRESH_REGION_PREFIX, self.fresh_seq);
+                self.fresh_seq += 1;
+                let _ = self.index_list(args.first());
+                Ok(Val::Region(name))
             }
             "tile.assemble" => {
                 // On-chip tile composition: no external memory effect; the
@@ -550,11 +640,19 @@ impl<'a> Walker<'a> {
                     }
                 }
                 let _ = leaf_name;
+                if let Some(method) = self_method(func) {
+                    return self.inline_call(&method, args);
+                }
                 if let Some(annotation_shape) = annotation_shape(annotation) {
                     return Ok(Val::Tile { shape: annotation_shape });
                 }
-                if let Some(method) = self_method(func) {
-                    return self.inline_call(&method);
+                // Unknown tile.* compute is on-chip and memory-invisible;
+                // it passes through with an unknown shape (a store of it
+                // refuses on the missing window instead).
+                if let OpPath::Namespaced(namespace, _) = &path {
+                    if namespace == &tool::NAMESPACE_TILE.to_owned() {
+                        return Ok(Val::Tile { shape: Vec::new() });
+                    }
                 }
                 Err(Unsupported {
                     construct: tool::CALL.to_owned(),
@@ -593,33 +691,57 @@ impl<'a> Walker<'a> {
         }
     }
 
-    fn inline_call(&mut self, name: &str) -> Result<Val, Unsupported> {
+    fn inline_call(&mut self, name: &str, args: &[Expr]) -> Result<Val, Unsupported> {
         let function = self
             .program
             .functions
             .iter()
-            .find(|f| f.name == name && is_inline(f))
+            .find(|f| f.name == name && (is_inline(f) || is_incore(f)))
             .ok_or_else(|| Unsupported {
                 construct: tool::CALL.to_owned(),
                 detail: format!("{name}: {}", tool::MSG_CALL_REFUSED),
             })?;
-        self.stmts(&function.body)?;
-        // The helper's `return` bound its result to the trailing scalar/
-        // tile value; recover it from the last Return.
-        let last = function.body.iter().rev().find_map(|s| match s {
-            Stmt::Return(Some(expr)) => Some(expr.clone()),
-            _ => None,
-        });
-        match last {
-            Some(expr) => self.value_of(&expr, &None),
-            None => Ok(Val::None),
+        // Bind the callee's parameters to the caller's argument values.
+        let mut bound = Vec::new();
+        for (param, arg) in function.params.iter().zip(args) {
+            let value = self.value_of(arg, &None)?;
+            bound.push((param.name.clone(), value));
         }
+        let saved: Vec<(String, Option<Val>)> = bound
+            .iter()
+            .map(|(n, _)| (n.clone(), self.env.get(n).cloned()))
+            .collect();
+        for (name, value) in &bound {
+            let _ = self.env.insert(name.clone(), value.clone());
+        }
+        let mut result = Ok(Val::None);
+        for stmt in &function.body {
+            if let Stmt::Return(Some(expr)) = stmt {
+                result = self.value_of(expr, &None);
+                break;
+            }
+            if let Err(e) = self.stmt(stmt) {
+                result = Err(e);
+                break;
+            }
+        }
+        for (name, old) in saved {
+            match old {
+                Some(v) => {
+                    let _ = self.env.insert(name, v);
+                }
+                None => {
+                    let _ = self.env.remove(&name);
+                }
+            }
+        }
+        result
     }
 
     fn term(&mut self, expr: &Expr) -> Result<Term, Unsupported> {
         match self.value_of(expr, &None)? {
             Val::Scalar(t) => Ok(t),
-            Val::Tile { .. } | Val::Region(_) | Val::None => Err(Unsupported {
+            Val::Tile { .. } | Val::Region(_) | Val::Tuple(_) | Val::None => Err(Unsupported {
                 construct: tool::SCALAR_OP.to_owned(),
                 detail: format!("{}: {expr:?}", tool::MSG_NONSCALAR),
             }),
@@ -663,9 +785,9 @@ impl<'a> Walker<'a> {
     fn region_of(&mut self, expr: &Expr) -> Result<String, Unsupported> {
         match self.value_of(expr, &None)? {
             Val::Region(base) => Ok(base),
-            _ => Err(Unsupported {
+            other => Err(Unsupported {
                 construct: tool::REGION.to_owned(),
-                detail: format!("{}: {expr:?}", tool::MSG_NONSCALAR),
+                detail: format!("{}: {expr:?} (value {:?})", tool::MSG_NONSCALAR, other),
             }),
         }
     }
@@ -705,6 +827,7 @@ impl<'a> Walker<'a> {
             shapes,
             guards,
             coords: self.coords.clone(),
+            havoc: self.havoc.clone(),
         });
         Ok(())
     }
@@ -719,6 +842,18 @@ impl<'a> Walker<'a> {
                 ));
             }
         }
+    }
+}
+
+/// Does the term mention the loop variable `mu`?
+fn term_mentions(t: &Term, mu: &str) -> bool {
+    match t {
+        Term::Var(name) => name == mu,
+        Term::Bin(_, a, b) | Term::Min(a, b) | Term::Max(a, b) => {
+            term_mentions(a, mu) || term_mentions(b, mu)
+        }
+        Term::Read { args, .. } => args.iter().any(|a| term_mentions(a, mu)),
+        _ => false,
     }
 }
 
@@ -737,6 +872,15 @@ fn is_inline(function: &Function) -> bool {
         .decorators
         .iter()
         .any(|d| dotted_name(d).contains(consts::FN_TYPE_INLINE))
+}
+
+/// `type=pl.FunctionType.InCore` — the spmd dispatch bodies call these;
+/// their bodies carry the memory accesses, so they are walked inline.
+fn is_incore(function: &Function) -> bool {
+    function
+        .decorators
+        .iter()
+        .any(|d| dotted_name(d).contains(tool::FN_TYPE_INCORE))
 }
 
 fn dotted_name(expr: &Expr) -> String {
