@@ -11,6 +11,7 @@
 #![allow(clippy::unwrap_used, clippy::panic)]
 
 use pypto_ir::parse_program;
+use pypto_smt::consts;
 use pypto_smt::term::Term;
 use pypto_smt::walk::{walk_spmd, Dir};
 
@@ -202,4 +203,66 @@ fn why3_proves_paged_attention_spmd() {
     let text = String::from_utf8_lossy(&out.stdout).to_string() + &String::from_utf8_lossy(&out.stderr);
     let valid = text.matches("Valid").count();
     assert!(valid >= 30, "expected every goal proved, got {valid}:\n{text}");
+}
+
+/// A valid program with a genuine intra-spmd WAW race: every block
+/// stores the same window of `out`. The compiler accepts it (fixture is
+/// real specialize output); the self-pair goal must exist.
+#[test]
+fn race_fixture_emits_self_pair_goal() {
+    for name in ["spmd_race", "spmd_partitioned"] {
+        let path = format!("{}/tests/fixtures/{}.py", env!("CARGO_MANIFEST_DIR"), name);
+        let program = parse_program(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        let body = walk_spmd(&program, 0).unwrap();
+        assert_eq!(body.width, 4);
+        let mlw = pypto_smt::mlw::emit_mlw(&body, name);
+        assert!(
+            mlw.contains("goal waw_out_n1"),
+            "{name}: the store races with itself across blocks"
+        );
+    }
+}
+
+/// End to end: z3 finds the race (goal not provable) and proves the
+/// stride-partitioned twin disjoint. Ignored without why3.
+#[test]
+#[ignore = "requires why3 (present in the dev environment, not in CI)"]
+fn why3_separates_race_from_partitioned() {
+    for (name, must_be_valid) in [("spmd_race", false), ("spmd_partitioned", true)] {
+        let path = format!("{}/tests/fixtures/{}.py", env!("CARGO_MANIFEST_DIR"), name);
+        let program = parse_program(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        let body = walk_spmd(&program, 0).unwrap();
+        let mlw = pypto_smt::mlw::emit_mlw(&body, name);
+        let dir = std::env::temp_dir().join("pypto-smt-why3-race");
+        let _ = std::fs::create_dir_all(&dir);
+        let file = dir.join(format!("{name}.mlw"));
+        std::fs::write(&file, mlw).unwrap();
+        let out = std::process::Command::new("why3")
+            .arg("prove")
+            .arg("-P")
+            .arg("Z3,4.16.0")
+            .arg("-t")
+            .arg("60")
+            .arg(&file)
+            .output()
+            .unwrap();
+        let text = String::from_utf8_lossy(&out.stdout).to_string()
+            + &String::from_utf8_lossy(&out.stderr);
+        let mut verdict: Option<String> = None;
+        let mut at_goal = false;
+        for line in text.lines() {
+            if line.contains(consts::GOAL_MARKER) {
+                at_goal = true;
+            } else if at_goal && line.contains(consts::VERDICT_MARKER) {
+                verdict = Some(line.to_owned());
+                break;
+            }
+        }
+        let valid = verdict.as_deref().is_some_and(|v| v.contains("Valid"));
+        assert_eq!(
+            valid, must_be_valid,
+            "{name}: waw verdict {:?} (expected valid={must_be_valid})",
+            verdict.unwrap_or_else(|| "(no verdict)".to_owned())
+        );
+    }
 }

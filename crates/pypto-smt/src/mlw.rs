@@ -156,7 +156,9 @@ impl<'a> Module<'a> {
     // Q1/Q2 numbering and copy letters are necessities.
     #[allow(inline_literal)]
     fn pair_goals(&mut self) {
-        let pairs: Vec<(usize, usize)> = self
+        // Cross pairs between distinct log entries, plus self-pairs: a
+        // single write site races with itself across block instances.
+        let mut pairs: Vec<(usize, usize)> = self
             .body
             .accesses
             .iter()
@@ -171,6 +173,11 @@ impl<'a> Module<'a> {
             .filter(|(i, j, a, b)| j > i && a.region == b.region && touching(a.dir, b.dir))
             .map(|(i, j, _, _)| (i, j))
             .collect();
+        for (i, a) in self.body.accesses.iter().enumerate() {
+            if a.dir == Dir::Write {
+                pairs.push((i, i));
+            }
+        }
         if pairs.is_empty() {
             let _ = writeln!(
                 self.out,

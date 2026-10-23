@@ -99,7 +99,33 @@ fn walk_stmts(function: &str, stmts: &[Stmt], sites: &mut Vec<SpmdSite>) {
                     walk_stmts(function, body, sites);
                 }
             }
-            Stmt::For { body, .. } | Stmt::While { body, .. } => {
+            Stmt::For { iterator, body, .. } => {
+                // Loop form: `for w in pl.spmd(n):` — the compiler's
+                // normalized shape for inline spmd bodies.
+                if let Some((args, kwargs)) = is_pl_call(iterator, consts::SCOPE_SPMD) {
+                    let width = args.first().and_then(|a| match a {
+                        Expr::Int(n) => Some(*n),
+                        _ => None,
+                    });
+                    let hint = kwargs
+                        .iter()
+                        .find(|(k, _)| k == consts::KWARG_NAME_HINT)
+                        .and_then(|(_, v)| match v {
+                            Expr::Str(s) => Some(s.clone()),
+                            _ => None,
+                        });
+                    if let Some(width) = width {
+                        sites.push(SpmdSite {
+                            function: function.to_owned(),
+                            hint,
+                            width,
+                            body_len: body.len(),
+                        });
+                    }
+                }
+                walk_stmts(function, body, sites);
+            }
+            Stmt::While { body, .. } => {
                 walk_stmts(function, body, sites);
             }
             _ => {}
