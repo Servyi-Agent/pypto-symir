@@ -56,6 +56,8 @@ pub const MSG_PROVENANCE: &str = "source: printed PyPTO IR (pre-pass), first spm
 /// Verdict-line markers parsed by the why3 end-to-end tests.
 pub const GOAL_MARKER: &str = "Goal waw_out_n1.";
 pub const VERDICT_MARKER: &str = "Prover result";
+/// Goal-line marker of the exhaustiveness (coverage) goal.
+pub const COVERAGE_MARKER: &str = "Goal covered_";
 /// The author-contract lemma injected by the conditional-race test: the
 /// table maps distinct blocks to distinct rows (a data fact, stated as an
 /// axiom-style lemma for the demonstration).

@@ -225,6 +225,52 @@ fn race_fixture_emits_self_pair_goal() {
 
 /// End to end: z3 finds the race (goal not provable) and proves the
 /// stride-partitioned twin disjoint. Ignored without why3.
+/// End to end for the exhaustiveness check: the stride-partitioned twin
+/// proves whole-tensor coverage; the racy twin's coverage is refuted
+/// with a concrete hole (row 2 is never written). The class boundary is
+/// exact: unguarded, carry-free, literal-dim writes.
+#[test]
+#[ignore = "requires why3 (present in the dev environment, not in CI)"]
+fn why3_coverage_positive_and_negative_controls() {
+    for (name, covered) in [("spmd_partitioned", true), ("spmd_race", false)] {
+        let path = format!("{}/tests/fixtures/{}.py", env!("CARGO_MANIFEST_DIR"), name);
+        let program = parse_program(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        let body = walk_spmd(&program, 0).unwrap();
+        let mlw = pypto_smt::mlw::emit_mlw(&body, name);
+        let dir = std::env::temp_dir().join("pypto-smt-why3-cov");
+        let _ = std::fs::create_dir_all(&dir);
+        let file = dir.join(format!("{name}.mlw"));
+        std::fs::write(&file, mlw).unwrap();
+        let out = std::process::Command::new("why3")
+            .arg("prove")
+            .arg("-P")
+            .arg("Z3,4.16.0")
+            .arg("-t")
+            .arg("60")
+            .arg(&file)
+            .output()
+            .unwrap();
+        let text = String::from_utf8_lossy(&out.stdout).to_string()
+            + &String::from_utf8_lossy(&out.stderr);
+        let mut verdict: Option<String> = None;
+        let mut at_goal = false;
+        for line in text.lines() {
+            if line.contains(consts::COVERAGE_MARKER) {
+                at_goal = true;
+            } else if at_goal && line.contains(consts::VERDICT_MARKER) {
+                verdict = Some(line.to_owned());
+                break;
+            }
+        }
+        let valid = verdict.as_deref().is_some_and(|v| v.contains("Valid"));
+        assert_eq!(
+            valid, covered,
+            "{name}: coverage verdict {:?} (expected covered={covered})",
+            verdict.unwrap_or_else(|| "(none)".to_owned())
+        );
+    }
+}
+
 #[test]
 #[ignore = "requires why3 (present in the dev environment, not in CI)"]
 fn why3_separates_race_from_partitioned() {
@@ -330,4 +376,19 @@ fn why3_conditional_race_needs_the_data_axiom() {
             verdict.unwrap_or_else(|| "(none)".to_owned())
         );
     }
+}
+
+/// Q3 regression (red first): an `pl.Out[pl.Tensor[[8,8], ...]]` param
+/// must contribute literal dim constants — the Out wrapper used to hide
+/// them, so coverage was silently skipped on every real output param.
+#[test]
+fn coverage_goal_emitted_for_out_annotated_output() {
+    let path = format!("{}/tests/fixtures/spmd_partitioned.py", env!("CARGO_MANIFEST_DIR"));
+    let program = parse_program(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    let body = walk_spmd(&program, 0).unwrap();
+    let mlw = pypto_smt::mlw::emit_mlw(&body, "partitioned twin");
+    assert!(
+        mlw.contains("goal covered_out"),
+        "the coverage goal must be emitted for the Out-annotated output; model:\n{mlw}"
+    );
 }
