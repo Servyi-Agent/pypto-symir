@@ -974,10 +974,25 @@ fn tensor_dims(annotation: &Expr) -> Vec<Expr> {
     loop {
         match cursor {
             Expr::Subscript { base, indices } => {
-                if let Some(pypto_ir::ast::IndexItem::Expr(e)) = indices.first() {
-                    if let Expr::List(dims) = e.as_ref() {
-                        return dims.clone();
+                match indices.first() {
+                    // `pl.Tensor[[d0, d1], dtype]` — the dim list directly.
+                    Some(pypto_ir::ast::IndexItem::Expr(e))
+                        if matches!(e.as_ref(), Expr::List(_)) =>
+                    {
+                        if let Expr::List(dims) = e.as_ref() {
+                            return dims.clone();
+                        }
                     }
+                    // Wrappers such as `pl.Out[pl.Tensor[[d0, d1], dtype]]`
+                    // carry the tensor expression as their first index:
+                    // descend into it.
+                    Some(pypto_ir::ast::IndexItem::Expr(e))
+                        if matches!(e.as_ref(), Expr::Subscript { .. }) =>
+                    {
+                        cursor = e;
+                        continue;
+                    }
+                    _ => {}
                 }
                 cursor = base;
             }
