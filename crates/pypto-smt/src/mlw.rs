@@ -254,7 +254,7 @@ impl<'a> Module<'a> {
     /// differ in the worker OR in any `pl.parallel` loop enclosing both
     /// accesses. Ordered loops never appear here.
     fn distinctness(&self, a: &Access, b: &Access) -> String {
-        let mut parts = vec![String::from("w_a <> w_b")];
+        let mut parts = vec![crate::consts::WORKER_DISTINCT.to_owned()];
         for (idx, l) in self.body.loops.iter().enumerate() {
             if l.kind == LoopKind::Unordered
                 && a.coords.contains(&l.var)

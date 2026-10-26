@@ -61,6 +61,9 @@ pub const VERDICT_MARKER: &str = "Prover result";
 /// Goal-line marker of the exhaustiveness (coverage) goal.
 pub const COVERAGE_MARKER: &str = "Goal covered_";
 /// The unordered-axes distinctness clause head in emitted pair goals.
+/// Worker-axis distinctness term in pair goals.
+pub const WORKER_DISTINCT: &str = "w_a <> w_b";
+/// The unordered-axes distinctness clause head in emitted pair goals.
 pub const CLAUSE_UNORDERED_AXES: &str = "w_a <> w_b \\/ (0 + 1 * k0_a) <> (0 + 1 * k0_b)";
 /// The author-contract lemma injected by the conditional-race test: the
 /// table maps distinct blocks to distinct rows (a data fact, stated as an
