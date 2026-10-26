@@ -232,7 +232,13 @@ fn race_fixture_emits_self_pair_goal() {
 #[test]
 #[ignore = "requires why3 (present in the dev environment, not in CI)"]
 fn why3_coverage_positive_and_negative_controls() {
-    for (name, covered) in [("spmd_partitioned", true), ("spmd_race", false)] {
+    for (name, covered) in [
+        ("spmd_partitioned", true),
+        ("spmd_race", false),
+        ("spmd_loop_cover", true),
+        ("spmd_if_hole", false),
+        ("spmd_if_true", true),
+    ] {
         let path = format!("{}/tests/fixtures/{}.py", env!("CARGO_MANIFEST_DIR"), name);
         let program = parse_program(&std::fs::read_to_string(&path).unwrap()).unwrap();
         let body = walk_spmd(&program, 0).unwrap();
@@ -390,5 +396,20 @@ fn coverage_goal_emitted_for_out_annotated_output() {
     assert!(
         mlw.contains("goal covered_out"),
         "the coverage goal must be emitted for the Out-annotated output; model:\n{mlw}"
+    );
+}
+
+/// Regression (red first): a plain `pl.range` loop inside the spmd body
+/// must not poison the havoc set via its own index variable — the loop's
+/// exit rebind treated `i = mu` as an exit value, skipping coverage.
+#[test]
+fn loop_inside_spmd_keeps_coverage_alive() {
+    let path = format!("{}/tests/fixtures/spmd_loop_cover.py", env!("CARGO_MANIFEST_DIR"));
+    let program = parse_program(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    let body = walk_spmd(&program, 0).unwrap();
+    assert!(
+        body.havocs.is_empty(),
+        "a loop index is not a carried value; havocs: {:?}",
+        body.havocs
     );
 }

@@ -362,12 +362,14 @@ impl<'a> Walker<'a> {
     }
 
     /// Rebinds every scalar whose term mentions `mu` to a fresh havoced
-    /// symbol (loop-exit values join the writer context).
+    /// symbol (loop-exit values join the writer context). The loop's own
+    /// index variable — an identity copy of `mu` — is dead at exit, not
+    /// an exit value, and must not poison the havoc set.
     fn rebind_mu_mentions(&mut self, mu: &str) -> Vec<String> {
         let mut rebinds: Vec<(String, String)> = Vec::new();
         for (name, val) in self.env.iter() {
             if let Val::Scalar(t) = val {
-                if term_mentions(t, mu) {
+                if term_mentions(t, mu) && *t != Term::Var(mu.to_owned()) {
                     rebinds.push((name.clone(), String::new()));
                 }
             }
