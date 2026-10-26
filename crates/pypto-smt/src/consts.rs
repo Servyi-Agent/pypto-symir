@@ -47,6 +47,8 @@ pub const SANITIZE_FALLBACK: char = '_';
 pub const EXTRA_INDEX_VARS_START: usize = 1;
 /// WhyML conjunction separator in emitted formulas.
 pub const SEP_WHY3_AND: &str = " /\\ ";
+/// WhyML disjunction separator in emitted formulas.
+pub const SEP_WHY3_OR: &str = " \\/ ";
 /// The mlw emission mode.
 pub const MODE_MLW: &str = "mlw";
 /// The first spmd site index.
@@ -58,6 +60,8 @@ pub const GOAL_MARKER: &str = "Goal waw_out_n1.";
 pub const VERDICT_MARKER: &str = "Prover result";
 /// Goal-line marker of the exhaustiveness (coverage) goal.
 pub const COVERAGE_MARKER: &str = "Goal covered_";
+/// The unordered-axes distinctness clause head in emitted pair goals.
+pub const CLAUSE_UNORDERED_AXES: &str = "w_a <> w_b \\/ (0 + 1 * k0_a) <> (0 + 1 * k0_b)";
 /// The author-contract lemma injected by the conditional-race test: the
 /// table maps distinct blocks to distinct rows (a data fact, stated as an
 /// axiom-style lemma for the demonstration).

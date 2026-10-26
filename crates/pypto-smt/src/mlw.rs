@@ -18,7 +18,7 @@ use std::fmt::Write;
 
 use crate::consts as tool;
 use crate::term::{BinOp, Bool, CmpOp, Term};
-use crate::walk::{sanitize, Access, Dir, SpmdBody};
+use crate::walk::{sanitize, Access, Dir, LoopKind, SpmdBody};
 
 /// Copy letter: instance variable namespace for one side of a pair.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -213,8 +213,9 @@ impl<'a> Module<'a> {
             // Drop quantifiers the goal body never mentions (why3 leaves
             // unused quantified variables polymorphic).
             let body_text = format!(
-                "{} w_a <> w_b {} {} {}",
+                "{} {} {} {} {}",
                 all_conds.join(" "),
+                self.distinctness(a, b),
                 self.bool_str(&a.guards, Copy::A),
                 self.bool_str(&b.guards, Copy::B),
                 self.overlap_str(a, b)
@@ -237,7 +238,7 @@ impl<'a> Module<'a> {
             for cond in &all_conds {
                 let _ = writeln!(self.out, "    {cond} ->");
             }
-            let _ = writeln!(self.out, "    w_a <> w_b ->");
+            let _ = writeln!(self.out, "    {} ->", self.distinctness(a, b));
             let _ = writeln!(
                 self.out,
                 "    not ({} /\\ {} /\\ {})",
@@ -247,6 +248,28 @@ impl<'a> Module<'a> {
             );
             let _ = writeln!(self.out);
         }
+    }
+
+    /// The unordered-axes clause: instances are concurrent iff they
+    /// differ in the worker OR in any `pl.parallel` loop enclosing both
+    /// accesses. Ordered loops never appear here.
+    fn distinctness(&self, a: &Access, b: &Access) -> String {
+        let mut parts = vec![String::from("w_a <> w_b")];
+        for (idx, l) in self.body.loops.iter().enumerate() {
+            if l.kind == LoopKind::Unordered
+                && a.coords.contains(&l.var)
+                && b.coords.contains(&l.var)
+            {
+                parts.push(format!(
+                    "({} + {} * k{idx}_a) <> ({} + {} * k{idx}_b)",
+                    self.term(&l.lo, Copy::A),
+                    self.term(&l.step, Copy::A),
+                    self.term(&l.lo, Copy::B),
+                    self.term(&l.step, Copy::B)
+                ));
+            }
+        }
+        parts.join(crate::consts::SEP_WHY3_OR)
     }
 
     fn overlap_str(&self, a: &Access, b: &Access) -> String {
