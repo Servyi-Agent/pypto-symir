@@ -266,3 +266,68 @@ fn why3_separates_race_from_partitioned() {
         );
     }
 }
+
+/// A *conditional* race: overlap depends on tensor contents. Block w
+/// stores at rows read from table[w]; the tool must refuse to prove it
+/// (z3 exhibits colliding table values), and the same goal must become
+/// Valid once the author's contract (distinct slots, distinct rows) is
+/// stated as a lemma — the lemma itself stays an axiom (sat), because it
+/// is a fact about runtime data, not a theorem.
+#[test]
+fn conditional_race_fixture_walks() {
+    let path = format!("{}/tests/fixtures/spmd_cond_race.py", env!("CARGO_MANIFEST_DIR"));
+    let program = parse_program(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    let body = walk_spmd(&program, 0).unwrap();
+    assert_eq!(body.width, 4);
+    let mlw = pypto_smt::mlw::emit_mlw(&body, "conditional race");
+    assert!(mlw.contains("function read_table"), "the metadata plane is read");
+    assert!(mlw.contains("goal waw_out_n1"), "the conditional WAW pair");
+}
+
+#[test]
+#[ignore = "requires why3 (present in the dev environment, not in CI)"]
+fn why3_conditional_race_needs_the_data_axiom() {
+    let path = format!("{}/tests/fixtures/spmd_cond_race.py", env!("CARGO_MANIFEST_DIR"));
+    let program = parse_program(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    let body = walk_spmd(&program, 0).unwrap();
+    let mlw = pypto_smt::mlw::emit_mlw(&body, "conditional race");
+    let augmented = mlw.replacen(
+        "  predicate overlap",
+        consts::TABLE_AXIOM_LEMMA,
+        1,
+    );
+    assert!(augmented.len() > mlw.len(), "axiom injected");
+    for (model, must_be_valid) in [(mlw.as_str(), false), (augmented.as_str(), true)] {
+        let dir = std::env::temp_dir().join("pypto-smt-why3-cond");
+        let _ = std::fs::create_dir_all(&dir);
+        let file = dir.join("cond.mlw");
+        std::fs::write(&file, model).unwrap();
+        let out = std::process::Command::new("why3")
+            .arg("prove")
+            .arg("-P")
+            .arg("Z3,4.16.0")
+            .arg("-t")
+            .arg("60")
+            .arg(&file)
+            .output()
+            .unwrap();
+        let text = String::from_utf8_lossy(&out.stdout).to_string()
+            + &String::from_utf8_lossy(&out.stderr);
+        let mut verdict: Option<String> = None;
+        let mut at_goal = false;
+        for line in text.lines() {
+            if line.contains(consts::GOAL_MARKER) {
+                at_goal = true;
+            } else if at_goal && line.contains(consts::VERDICT_MARKER) {
+                verdict = Some(line.to_owned());
+                break;
+            }
+        }
+        let valid = verdict.as_deref().is_some_and(|v| v.contains("Valid"));
+        assert_eq!(
+            valid, must_be_valid,
+            "verdict {:?} (expected valid={must_be_valid})",
+            verdict.unwrap_or_else(|| "(none)".to_owned())
+        );
+    }
+}
