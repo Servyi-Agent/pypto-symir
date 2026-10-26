@@ -413,3 +413,25 @@ fn loop_inside_spmd_keeps_coverage_alive() {
         body.havocs
     );
 }
+
+/// Regression (was red): `pl.parallel` inside an spmd body is a second
+/// unordered axis — before the LoopKind fix the tool PROVED waw Valid
+/// for spmd_par_race while each worker's two parallel iterations write
+/// the same window (a false disjointness proof). The distinctness clause
+/// must now include the parallel loop's mu.
+#[test]
+fn parallel_inside_spmd_is_unordered() {
+    let path = format!("{}/tests/fixtures/spmd_par_race.py", env!("CARGO_MANIFEST_DIR"));
+    let program = parse_program(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    let body = walk_spmd(&program, 0).unwrap();
+    assert_eq!(
+        body.loops.iter().filter(|l| l.kind == pypto_smt::walk::LoopKind::Unordered).count(),
+        1,
+        "the parallel loop is recorded unordered"
+    );
+    let mlw = pypto_smt::mlw::emit_mlw(&body, "parallel race");
+    assert!(
+        mlw.contains(consts::CLAUSE_UNORDERED_AXES),
+        "the pair distinctness must include the parallel mu; model:\n{mlw}"
+    );
+}

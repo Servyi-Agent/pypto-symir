@@ -38,10 +38,22 @@ pub struct Access {
     pub havoc: Vec<String>,
 }
 
+/// Whether a loop's iterations are program-ordered or concurrent.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LoopKind {
+    /// `pl.range` / `pl.unroll` — sequential: same-worker iterations are
+    /// ordered and never queried as pairs.
+    Ordered,
+    /// `pl.parallel` — concurrent: distinct iterations are unordered and
+    /// join the pair distinctness alongside the worker axis.
+    Unordered,
+}
+
 /// One loop of the body, as an exact instance characterization.
 #[derive(Debug, Clone)]
 pub struct LoopInfo {
     pub var: String,
+    pub kind: LoopKind,
     /// `[lo, hi)` with `mu = lo + step * k`, `k >= 0`; the step may be a
     /// term (a runtime stride is part of the havoced writer context, and
     /// the encoded instances stay a superset of the real ones).
@@ -334,11 +346,12 @@ impl<'a> Walker<'a> {
             }
             return Ok(());
         }
-        let (lo, hi, step) = self.loop_bounds(iterator)?;
+        let (lo, hi, step, kind) = self.loop_bounds(iterator)?;
         let var = format!("{}{}", tool::MU_PREFIX, self.loop_seq);
         self.loop_seq += 1;
         self.body.loops.push(LoopInfo {
             var: var.clone(),
+            kind,
             lo: lo.clone(),
             hi: hi.clone(),
             step,
@@ -412,27 +425,46 @@ impl<'a> Walker<'a> {
     // IR op names, argument positions and arities below are the IR's
     // own signatures (necessities, not choices).
     #[allow(inline_literal)]
-    fn loop_bounds(&mut self, iterator: &Expr) -> Result<(Term, Term, Term), Unsupported> {
-        let (args, leaf) = match iterator {
-            Expr::Call { func, args, .. } if is_attr(func, consts::ITER_RANGE)
-                || is_attr(func, consts::ITER_UNROLL)
-                || is_attr(func, consts::ITER_PARALLEL) =>
-            {
-                (args, String::new())
+    fn loop_bounds(
+        &mut self,
+        iterator: &Expr,
+    ) -> Result<(Term, Term, Term, LoopKind), Unsupported> {
+        let (args, kind) = match iterator {
+            Expr::Call { func, args, .. } => {
+                let kind = if is_attr(func, consts::ITER_PARALLEL) {
+                    LoopKind::Unordered
+                } else if is_attr(func, consts::ITER_RANGE) || is_attr(func, consts::ITER_UNROLL)
+                {
+                    LoopKind::Ordered
+                } else {
+                    return Err(Unsupported {
+                        construct: tool::ITERATOR.to_owned(),
+                        detail: format!("{}: {}", dotted_name(iterator), tool::MSG_ITERATOR_REFUSED),
+                    });
+                };
+                (args, kind)
             }
             other => {
-                let name = dotted_name(other);
                 return Err(Unsupported {
                     construct: tool::ITERATOR.to_owned(),
-                    detail: format!("{name}: {}", tool::MSG_ITERATOR_REFUSED),
+                    detail: format!("{}: {}", dotted_name(other), tool::MSG_ITERATOR_REFUSED),
                 });
             }
         };
-        let _ = leaf;
         match args.len() {
-            1 => Ok((Term::Int(0), self.term(&args[0])?, Term::Int(1))),
-            2 => Ok((self.term(&args[0])?, self.term(&args[1])?, Term::Int(1))),
-            3 => Ok((self.term(&args[0])?, self.term(&args[1])?, self.term(&args[2])?)),
+            1 => Ok((Term::Int(0), self.term(&args[0])?, Term::Int(1), kind)),
+            2 => Ok((
+                self.term(&args[0])?,
+                self.term(&args[1])?,
+                Term::Int(1),
+                kind,
+            )),
+            3 => Ok((
+                self.term(&args[0])?,
+                self.term(&args[1])?,
+                self.term(&args[2])?,
+                kind,
+            )),
             _ => Err(Unsupported {
                 construct: tool::ITERATOR.to_owned(),
                 detail: tool::MSG_ITERATOR_REFUSED.to_owned(),
