@@ -1,0 +1,21 @@
+module attributes {pto.target_arch = "a5"} {
+  func.func @slicing_incore_0(%arg0: !pto.ptr<f32>, %arg1: !pto.ptr<f32>) attributes {pto.kernel_kind = #pto.kernel_kind<vector>} {
+  %c0_i64 = arith.constant 0 : i64
+  %c4_index = arith.constant 4 : index
+  %c8_index = arith.constant 8 : index
+  %c1_index = arith.constant 1 : index
+  %c2_index = arith.constant 2 : index
+  %c0_index = arith.constant 0 : index
+  %cst_6 = arith.constant 2.00000000000000000e+00 : f32
+  %x__ssa_v0_view = pto.make_tensor_view %arg0, shape = [%c4_index, %c8_index], strides = [%c8_index, %c1_index] {layout = #pto.layout<nd>} : !pto.tensor_view<?x?xf32> loc("/workspace/slicing_example.py":18:5)
+  %out__ssa_v0_view = pto.make_tensor_view %arg1, shape = [%c4_index, %c8_index], strides = [%c8_index, %c1_index] {layout = #pto.layout<nd>} : !pto.tensor_view<?x?xf32> loc("/workspace/slicing_example.py":18:5)
+  %t__tile = pto.alloc_tile addr = %c0_i64 valid_row = %c2_index valid_col = %c8_index : !pto.tile_buf<loc=vec, dtype=f32, rows=2, cols=8, v_row=?, v_col=?, blayout=row_major, slayout=none_box, fractal=512, pad=0> loc("/workspace/slicing_example.py":19:9)
+  %x__ssa_v0_pview = pto.partition_view %x__ssa_v0_view, offsets = [%c0_index, %c0_index], sizes = [%c2_index, %c8_index] : !pto.tensor_view<?x?xf32> -> !pto.partition_tensor_view<2x8xf32> loc("/workspace/slicing_example.py":19:9)
+  pto.tload ins(%x__ssa_v0_pview : !pto.partition_tensor_view<2x8xf32>) outs(%t__tile : !pto.tile_buf<loc=vec, dtype=f32, rows=2, cols=8, v_row=?, v_col=?, blayout=row_major, slayout=none_box, fractal=512, pad=0>) loc("/workspace/slicing_example.py":19:9)
+  %0 = pto.alloc_tile addr = %c0_i64 valid_row = %c2_index valid_col = %c8_index : !pto.tile_buf<loc=vec, dtype=f32, rows=2, cols=8, v_row=?, v_col=?, blayout=row_major, slayout=none_box, fractal=512, pad=0> loc("/workspace/slicing_example.py":19:9)
+  pto.tmuls ins(%t__tile, %cst_6 : !pto.tile_buf<loc=vec, dtype=f32, rows=2, cols=8, v_row=?, v_col=?, blayout=row_major, slayout=none_box, fractal=512, pad=0>, f32) outs(%0 : !pto.tile_buf<loc=vec, dtype=f32, rows=2, cols=8, v_row=?, v_col=?, blayout=row_major, slayout=none_box, fractal=512, pad=0>) loc("/workspace/slicing_example.py":19:9)
+  %out__ssa_v0_pview = pto.partition_view %out__ssa_v0_view, offsets = [%c0_index, %c0_index], sizes = [%c2_index, %c8_index] : !pto.tensor_view<?x?xf32> -> !pto.partition_tensor_view<2x8xf32> loc("/workspace/slicing_example.py":19:9)
+  pto.tstore ins(%0 : !pto.tile_buf<loc=vec, dtype=f32, rows=2, cols=8, v_row=?, v_col=?, blayout=row_major, slayout=none_box, fractal=512, pad=0>) outs(%out__ssa_v0_pview : !pto.partition_tensor_view<2x8xf32>) loc("/workspace/slicing_example.py":19:9)
+  return
+  }
+}

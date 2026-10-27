@@ -16,31 +16,55 @@ fn main() -> ExitCode {
         eprintln!("{}", consts::MSG_USAGE);
         return ExitCode::FAILURE;
     }
-    let src = match fs::read_to_string(&args[consts::PATH_ARG_INDEX]) {
+    let input_path = args[consts::PATH_ARG_INDEX].clone();
+    let src = match fs::read_to_string(&input_path) {
         Ok(src) => src,
         Err(e) => {
-            eprintln!(
-                "{} {}: {e}",
-                consts::MSG_READ_FAILURE,
-                args[consts::PATH_ARG_INDEX]
-            );
+            eprintln!("{} {input_path}: {e}", consts::MSG_READ_FAILURE);
             return ExitCode::FAILURE;
         }
     };
-    let program = match pypto_ir::parse_program(&src) {
-        Ok(program) => program,
-        Err(e) => {
-            eprintln!("{e}");
-            return ExitCode::FAILURE;
+    // Printed IR parses directly; DSL source goes through the real
+    // compiler (specialize) first — the tool runs it for you.
+    let (program, compiled) = match pypto_ir::parse_program(&src) {
+        Ok(program) => (program, false),
+        Err(_) => {
+            let kernel = flag_value(&args, consts::FLAG_KERNEL);
+            match pypto_smt::compile::specialize_to_ir(
+                &input_path,
+                kernel.as_deref(),
+            ) {
+                Ok(ir) => match pypto_ir::parse_program(&ir) {
+                    Ok(program) => (program, true),
+                    Err(e) => {
+                        eprintln!("{e}");
+                        eprintln!("{}", consts::MSG_INPUT_CONTRACT);
+                        return ExitCode::FAILURE;
+                    }
+                },
+                Err(e) => {
+                    eprintln!("{e}");
+                    eprintln!("{}", consts::MSG_INPUT_CONTRACT);
+                    return ExitCode::FAILURE;
+                }
+            }
         }
     };
+    if compiled {
+        eprintln!("{} {input_path}", consts::MSG_COMPILED);
+    }
+
     if let Some(mode) = flag_value(&args, consts::FLAG_SPMD) {
         let site = flag_value(&args, consts::FLAG_SITE)
             .and_then(|s| s.parse::<usize>().ok())
             .unwrap_or(consts::FIRST_SITE);
         return spmd_mode(&program, &mode, site);
     }
-    for site in find_spmd(&program) {
+    let sites = find_spmd(&program);
+    if sites.is_empty() {
+        eprintln!("{}", consts::MSG_NO_SITES);
+    }
+    for site in sites {
         let disjoint = stride_partition_is_disjoint(site.width, site.width);
         println!(
             "{}: fn={} hint={:?} width={} body_len={} => {}",
