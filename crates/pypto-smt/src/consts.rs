@@ -73,6 +73,13 @@ pub const CHECK_TEMP_DIR: &str = "pypto-smt-check";
 pub const VERDICT_GOAL: &str = "Goal ";
 /// Why3's valid verdict marker.
 pub const VERDICT_VALID: &str = "Valid";
+/// Why3's satisfiable-refutation marker.
+pub const VERDICT_SAT: &str = "(sat)";
+/// Check-mode verdict words: say what the answer IS, not what the
+/// prover's task status was.
+pub const VERDICT_PROVED: &str = "PROVED";
+pub const VERDICT_REFUTED: &str = "REFUTED (counterexample exists)";
+pub const VERDICT_UNDECIDED: &str = "UNDECIDED (solver gave no answer)";
 /// Hint appended when both IR parsing and the compiler step fail.
 pub const MSG_INPUT_CONTRACT: &str =
     "input is neither printed IR nor compilable DSL source (@pl.jit kernel)";

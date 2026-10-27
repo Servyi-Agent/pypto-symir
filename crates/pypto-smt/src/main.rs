@@ -157,10 +157,17 @@ fn check_site(body: &walk::SpmdBody, site: usize) -> ExitCode {
         } else if line.contains(consts::VERDICT_MARKER) {
             if let Some(goal) = at_goal.take() {
                 let proved = line.contains(consts::VERDICT_VALID);
+                let verdict = if proved {
+                    consts::VERDICT_PROVED
+                } else if line.contains(consts::VERDICT_SAT) {
+                    consts::VERDICT_REFUTED
+                } else {
+                    consts::VERDICT_UNDECIDED
+                };
                 if !proved {
                     all_proved = false;
                 }
-                println!("site {site}  {goal:<24} {}", line.trim());
+                println!("site {site}  {goal:<24} {verdict}  [{}]", line.trim());
             }
         }
     }
