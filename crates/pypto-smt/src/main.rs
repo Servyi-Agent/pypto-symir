@@ -67,24 +67,77 @@ fn flag_value(args: &[String], flag: &str) -> Option<String> {
         .cloned()
 }
 
-/// `--spmd <index|mlw>`: walk a body and act on it.
+/// `--spmd <mlw|check>`: walk a body and act on it.
 fn spmd_mode(program: &pypto_ir::ast::Program, mode: &str, site: usize) -> ExitCode {
-    if mode == consts::MODE_MLW {
-        match walk::walk_spmd(program, site) {
-            Ok(body) => {
-                println!(
-                    "{}",
-                    mlw::emit_mlw(&body, consts::MSG_PROVENANCE)
-                );
-                ExitCode::SUCCESS
-            }
+    if mode == consts::MODE_MLW || mode == consts::MODE_CHECK {
+        let body = match walk::walk_spmd(program, site) {
+            Ok(body) => body,
             Err(e) => {
                 eprintln!("{}: {}: {}", consts::MSG_REFUSED, e.construct, e.detail);
-                ExitCode::FAILURE
+                return ExitCode::FAILURE;
+            }
+        };
+        if mode == consts::MODE_MLW {
+            println!("{}", mlw::emit_mlw(&body, consts::MSG_PROVENANCE));
+            return ExitCode::SUCCESS;
+        }
+        return check_site(&body, site);
+    }
+    eprintln!("{}", consts::MSG_USAGE);
+    ExitCode::FAILURE
+}
+
+/// One command: emit the model and discharge it with why3/z3, printing
+/// one verdict line per goal. Exit FAILURE when any goal is not proved.
+fn check_site(body: &walk::SpmdBody, site: usize) -> ExitCode {
+    let model = mlw::emit_mlw(body, consts::MSG_PROVENANCE);
+    let dir = std::env::temp_dir().join(consts::CHECK_TEMP_DIR);
+    if let Err(e) = std::fs::create_dir_all(&dir) {
+        eprintln!("{e}");
+        return ExitCode::FAILURE;
+    }
+    let file = dir.join(format!("site{site}.mlw"));
+    if let Err(e) = std::fs::write(&file, model) {
+        eprintln!("{e}");
+        return ExitCode::FAILURE;
+    }
+    let output = match std::process::Command::new(consts::WHY3_BIN)
+        .arg(consts::WHY3_ARG_PROVE)
+        .arg(consts::WHY3_ARG_PROVER)
+        .arg(consts::WHY3_PROVER)
+        .arg(consts::WHY3_ARG_TIME)
+        .arg(consts::WHY3_TIMELIMIT)
+        .arg(&file)
+        .output()
+    {
+        Ok(output) => output,
+        Err(e) => {
+            eprintln!("{} ({e})", consts::MSG_NO_WHY3);
+            return ExitCode::FAILURE;
+        }
+    };
+    let text = String::from_utf8_lossy(&output.stdout).to_string()
+        + &String::from_utf8_lossy(&output.stderr);
+    let mut all_proved = true;
+    let mut at_goal: Option<String> = None;
+    for line in text.lines() {
+        if line.contains(consts::VERDICT_GOAL) {
+            if let Some(goal) = line.split_whitespace().last() {
+                at_goal = Some(goal.to_owned());
+            }
+        } else if line.contains(consts::VERDICT_MARKER) {
+            if let Some(goal) = at_goal.take() {
+                let proved = line.contains(consts::VERDICT_VALID);
+                if !proved {
+                    all_proved = false;
+                }
+                println!("site {site}  {goal:<24} {}", line.trim());
             }
         }
+    }
+    if all_proved {
+        ExitCode::SUCCESS
     } else {
-        eprintln!("{}", consts::MSG_USAGE);
         ExitCode::FAILURE
     }
 }

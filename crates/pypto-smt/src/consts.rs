@@ -51,6 +51,29 @@ pub const SEP_WHY3_AND: &str = " /\\ ";
 pub const SEP_WHY3_OR: &str = " \\/ ";
 /// The mlw emission mode.
 pub const MODE_MLW: &str = "mlw";
+/// The check mode (walk + emit + why3 in one command).
+pub const MODE_CHECK: &str = "check";
+/// The why3 binary run by --spmd check.
+pub const WHY3_BIN: &str = "why3";
+/// why3 subcommand for proving.
+pub const WHY3_ARG_PROVE: &str = "prove";
+/// why3 prover-selection flag.
+pub const WHY3_ARG_PROVER: &str = "-P";
+/// why3 timelimit flag.
+pub const WHY3_ARG_TIME: &str = "-t";
+/// The configured prover used by --spmd check.
+pub const WHY3_PROVER: &str = "Z3,4.16.0";
+/// Per-goal time limit (seconds) for --spmd check.
+pub const WHY3_TIMELIMIT: &str = "120";
+/// Temp directory for check-mode models.
+pub const CHECK_TEMP_DIR: &str = "pypto-smt-check";
+/// Why3's goal-line marker parsed by check mode.
+pub const VERDICT_GOAL: &str = "Goal ";
+/// Why3's valid verdict marker.
+pub const VERDICT_VALID: &str = "Valid";
+/// Message when why3 is not installed.
+pub const MSG_NO_WHY3: &str =
+    "why3 is not installed; --spmd check needs it (why3 config detect with Z3)";
 /// The first spmd site index.
 pub const FIRST_SITE: usize = 0;
 /// Provenance line for emitted models.
