@@ -70,7 +70,7 @@ print(kernel.specialize(*args).as_python())
 
 /// Runs the compiler step on a DSL source file. On success, returns the
 /// printed IR. On failure, returns the compiler's stderr for reporting.
-pub fn specialize_to_ir(path: &str, kernel: Option<&str>) -> Result<String, String> {
+pub fn specialize_to_ir(path: &str, kernel: Option<&str>) -> Result<(String, String), String> {
     let python = env::var(consts::ENV_PYTHON).unwrap_or_else(|_| consts::PYPTO_PYTHON.to_owned());
     let path_var = env::var(consts::ENV_PATH).unwrap_or_else(|_| consts::PYPTO_PATH.to_owned());
     let mut cmd = Command::new(&python);
@@ -86,7 +86,14 @@ pub fn specialize_to_ir(path: &str, kernel: Option<&str>) -> Result<String, Stri
         .output()
         .map_err(|e| format!("{} {python}: {e}", consts::MSG_NO_COMPILER))?;
     if output.status.success() {
-        Ok(String::from_utf8_lossy(&output.stdout).to_string())
+        let ir = String::from_utf8_lossy(&output.stdout).to_string();
+        // The driver names the kernel it picked on stderr; surface it.
+        let picked = String::from_utf8_lossy(&output.stderr)
+            .lines()
+            .find(|l| l.contains(consts::KERNEL_TAG))
+            .map(|l| l.split_whitespace().last().unwrap_or_default().to_owned())
+            .unwrap_or_default();
+        Ok((ir, picked))
     } else {
         Err(String::from_utf8_lossy(&output.stderr).to_string())
     }

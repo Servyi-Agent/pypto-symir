@@ -102,6 +102,10 @@ pub const ENV_PYTHON: &str = "PYPTO_SMT_PYTHON";
 pub const ENV_PATH: &str = "PYPTO_SMT_PATH";
 /// Preflight line for a successful compiler step.
 pub const MSG_COMPILED: &str = "compiled via pypto specialize:";
+/// Line prefix naming the analyzed kernel (DSL inputs).
+pub const MSG_KERNEL: &str = "kernel:";
+/// The driver's kernel-name stderr tag.
+pub const KERNEL_TAG: &str = "kernel:";
 /// Message when the compiler interpreter cannot be spawned.
 pub const MSG_NO_COMPILER: &str = "cannot run the pypto interpreter";
 /// Note when a program contains no spmd bodies.

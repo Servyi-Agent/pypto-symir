@@ -34,14 +34,19 @@ fn main() -> ExitCode {
                 &input_path,
                 kernel.as_deref(),
             ) {
-                Ok(ir) => match pypto_ir::parse_program(&ir) {
-                    Ok(program) => (program, true),
-                    Err(e) => {
-                        eprintln!("{e}");
-                        eprintln!("{}", consts::MSG_INPUT_CONTRACT);
-                        return ExitCode::FAILURE;
+                Ok((ir, picked)) => {
+                    if !picked.is_empty() {
+                        eprintln!("{} {picked}", consts::MSG_KERNEL);
                     }
-                },
+                    match pypto_ir::parse_program(&ir) {
+                        Ok(program) => (program, true),
+                        Err(e) => {
+                            eprintln!("{e}");
+                            eprintln!("{}", consts::MSG_INPUT_CONTRACT);
+                            return ExitCode::FAILURE;
+                        }
+                    }
+                }
                 Err(e) => {
                     eprintln!("{e}");
                     eprintln!("{}", consts::MSG_INPUT_CONTRACT);
