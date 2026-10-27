@@ -1,0 +1,31 @@
+{
+  "schema": 2,
+  "supported_execution_modes": [
+    "program"
+  ],
+  "params": [
+    {
+      "name": "x",
+      "direction": "In",
+      "shape": [
+        4,
+        8
+      ],
+      "dtype": "fp32",
+      "layout": "ND"
+    },
+    {
+      "name": "out",
+      "direction": "Out",
+      "shape": [
+        4,
+        8
+      ],
+      "dtype": "fp32",
+      "layout": "ND"
+    }
+  ],
+  "num_return_types": 1,
+  "platform": "a5sim",
+  "backend_type": "Ascend950"
+}

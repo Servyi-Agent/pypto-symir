@@ -27,6 +27,8 @@ pub const PATH_ARG_INDEX: usize = 1;
 pub const FLAG_SPMD: &str = "--spmd";
 /// Site-selection flag (`--site N`, 0-based in `find_spmd` order).
 pub const FLAG_SITE: &str = "--site";
+/// Kernel-selection flag for DSL-source inputs.
+pub const FLAG_KERNEL: &str = "--kernel";
 /// Namespace prefix of tensor-level (view-forming) ops.
 pub const NAMESPACE_TENSOR: &str = "tensor";
 /// The on-chip tile op namespace.
@@ -71,9 +73,39 @@ pub const CHECK_TEMP_DIR: &str = "pypto-smt-check";
 pub const VERDICT_GOAL: &str = "Goal ";
 /// Why3's valid verdict marker.
 pub const VERDICT_VALID: &str = "Valid";
+/// Hint appended when both IR parsing and the compiler step fail.
+pub const MSG_INPUT_CONTRACT: &str =
+    "input is neither printed IR nor compilable DSL source (@pl.jit kernel)";
 /// Message when why3 is not installed.
 pub const MSG_NO_WHY3: &str =
     "why3 is not installed; --spmd check needs it (why3 config detect with Z3)";
+/// Default interpreter that has pypto importable (overridable via
+/// PYPTO_SMT_PYTHON).
+pub const PYPTO_PYTHON: &str = "/root/pypto/.venv/bin/python";
+/// Default PYTHONPATH for the compiler step (overridable via
+/// PYPTO_SMT_PATH).
+pub const PYPTO_PATH: &str =
+    "/root/pypto:/root/pypto-lib:/root/pypto/runtime:/root/pypto/runtime/python";
+/// The interpreter's run-from-string flag.
+pub const PY_ARG_CODE: &str = "-c";
+/// Empty positional argument for the driver's optional kernel name.
+pub const EMPTY_ARG: &str = "";
+/// PYTHONPATH env name for the compiler step.
+pub const ENV_PYTHONPATH: &str = "PYTHONPATH";
+/// Runtime pin check bypass for the compiler step.
+pub const ENV_SKIP_PIN_KEY: &str = "PYPTO_SKIP_RUNTIME_PIN_CHECK";
+/// Value disabling the runtime pin check.
+pub const ENV_SKIP_PIN_VAL: &str = "1";
+/// Env-var name overriding the interpreter.
+pub const ENV_PYTHON: &str = "PYPTO_SMT_PYTHON";
+/// Env-var name overriding PYTHONPATH.
+pub const ENV_PATH: &str = "PYPTO_SMT_PATH";
+/// Preflight line for a successful compiler step.
+pub const MSG_COMPILED: &str = "compiled via pypto specialize:";
+/// Message when the compiler interpreter cannot be spawned.
+pub const MSG_NO_COMPILER: &str = "cannot run the pypto interpreter";
+/// Note when a program contains no spmd bodies.
+pub const MSG_NO_SITES: &str = "no spmd sites in this program (symir analyzes orchestration-level task graphs)";
 /// The first spmd site index.
 pub const FIRST_SITE: usize = 0;
 /// Provenance line for emitted models.

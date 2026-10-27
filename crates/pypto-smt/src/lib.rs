@@ -16,6 +16,7 @@
 // silence the unknown-lint noise at the crate root (tests do the same).
 #![allow(unknown_lints)]
 
+pub mod compile;
 pub mod consts;
 pub mod mlw;
 pub mod term;

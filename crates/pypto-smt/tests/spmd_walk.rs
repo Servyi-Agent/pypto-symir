@@ -435,3 +435,17 @@ fn parallel_inside_spmd_is_unordered() {
         "the pair distinctness must include the parallel mu; model:\n{mlw}"
     );
 }
+
+/// The compiler step: DSL source in, printed IR out, then the normal
+/// flow. Needs the pypto venv — ignored without it (CI has no pypto).
+#[test]
+#[ignore = "requires the pypto interpreter (present in the dev environment, not in CI)"]
+fn compiles_dsl_source_to_ir() {
+    let path = format!("{}/tests/fixtures/src_spmd_race.py", env!("CARGO_MANIFEST_DIR"));
+    let ir = pypto_smt::compile::specialize_to_ir(&path, None).unwrap();
+    let program = parse_program(&ir).unwrap();
+    let body = walk_spmd(&program, 0).unwrap();
+    assert_eq!(body.width, 4);
+    let mlw = pypto_smt::mlw::emit_mlw(&body, "dsl source");
+    assert!(mlw.contains("goal waw_out_n1"), "the race self-pair");
+}
