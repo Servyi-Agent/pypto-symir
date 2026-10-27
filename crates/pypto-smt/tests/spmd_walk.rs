@@ -442,7 +442,8 @@ fn parallel_inside_spmd_is_unordered() {
 #[ignore = "requires the pypto interpreter (present in the dev environment, not in CI)"]
 fn compiles_dsl_source_to_ir() {
     let path = format!("{}/tests/fixtures/src_spmd_race.py", env!("CARGO_MANIFEST_DIR"));
-    let ir = pypto_smt::compile::specialize_to_ir(&path, None).unwrap();
+    let (ir, picked) = pypto_smt::compile::specialize_to_ir(&path, None).unwrap();
+    assert_eq!(picked, "spmd_race", "the picked kernel is named");
     let program = parse_program(&ir).unwrap();
     let body = walk_spmd(&program, 0).unwrap();
     assert_eq!(body.width, 4);
